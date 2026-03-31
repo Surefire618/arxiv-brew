@@ -22,11 +22,14 @@ _P = "[brew]"
 
 
 def main(argv: list[str] | None = None) -> int:
-    # Handle `arxiv-brew init` before argparse
+    # Handle subcommands before argparse
     args_list = argv if argv is not None else sys.argv[1:]
     if args_list and args_list[0] == "init":
         from .init import run_init
         return run_init()
+    if args_list and args_list[0] == "refine":
+        from .refine import main as refine_main
+        return refine_main(args_list[1:])
 
     parser = argparse.ArgumentParser(
         prog="arxiv-brew",
