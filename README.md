@@ -23,10 +23,12 @@ flowchart LR
 ## Install
 
 ```bash
+git clone https://github.com/Surefire618/arxiv-brew.git
+cd arxiv-brew
 pip install .
 ```
 
-Or install in development mode:
+For development:
 
 ```bash
 pip install -e .
