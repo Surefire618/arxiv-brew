@@ -21,6 +21,12 @@ _P = "[brew]"
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Handle `arxiv-brew init` before argparse
+    args_list = argv if argv is not None else sys.argv[1:]
+    if args_list and args_list[0] == "init":
+        from .init import run_init
+        return run_init()
+
     parser = argparse.ArgumentParser(
         prog="arxiv-brew",
         description="Full arXiv digest pipeline.",

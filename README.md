@@ -23,8 +23,13 @@ flowchart LR
 ## Install
 
 ```bash
-git clone https://github.com/Surefire618/arxiv-brew.git
-cd arxiv-brew
+pip install .
+```
+
+Or install in development mode:
+
+```bash
+pip install -e .
 ```
 
 Python 3.10+, stdlib only. No external dependencies.
@@ -32,34 +37,31 @@ Python 3.10+, stdlib only. No external dependencies.
 ## Quick start
 
 ```bash
-# 1. Create your research profile
-python -m arxiv_brew.init
+# 1. Set up your research profile
+arxiv-brew init
 # Edit config/my_research.md with your topics and keywords
 
 # 2. Initialize keywords and run
-python -m arxiv_brew --research-profile config/my_research.md --init-keywords --digest-only
+arxiv-brew --research-profile config/my_research.md --init-keywords --digest-only
 ```
 
 ## Usage
 
 ```bash
 # Daily digest to stdout
-python -m arxiv_brew --digest-only
+arxiv-brew --digest-only
 
 # Full pipeline with file output
-python -m arxiv_brew --output result.json --paper-dir papers --digest-dir digests
+arxiv-brew --output result.json --paper-dir papers --digest-dir digests
 
 # Step-by-step
-python -m arxiv_brew.pull -o papers.json
-python -m arxiv_brew.download papers.json -o downloaded.json
-python -m arxiv_brew.summarize downloaded.json --digest-dir digests/
+arxiv-pull -o papers.json
+arxiv-download papers.json -o downloaded.json
+arxiv-summarize downloaded.json --digest-dir digests/
 
 # Archive management
-python -m arxiv_brew.db status
-python -m arxiv_brew.db cleanup --retention-days 14
-
-# Show keyword stats
-python -m arxiv_brew.keywords
+arxiv-db status
+arxiv-db cleanup --retention-days 14
 ```
 
 ## Configuration
@@ -67,28 +69,32 @@ python -m arxiv_brew.keywords
 All keywords and categories come from your research profile (`config/my_research.md`). See [`config/my_research.md.template`](config/my_research.md.template) for the format.
 
 The profile defines:
-- **Categories** — which arXiv categories to scan (e.g. `cs.CL`, `cond-mat.mtrl-sci`)
+- **Categories** — which arXiv categories to scan (e.g. `cs.CL`, `cond-mat.mtrl-sci`). Full list: https://arxiv.org/category_taxonomy
 - **Topic clusters** — groups of keywords (e.g. "NLP", "Reinforcement Learning")
 - **Word boundary keywords** — short acronyms matched as whole words only
 - **Broad keywords** — generic terms that require a context keyword to co-occur
 - **Context keywords** — terms that validate broad keyword matches
 
-Run `python -m arxiv_brew --init-keywords --research-profile config/my_research.md` after editing your profile to rebuild the keyword database.
+Run `arxiv-brew --init-keywords --research-profile config/my_research.md` after editing your profile to rebuild the keyword database.
 
 ## Agent integration
 
 See [docs/agent_integration.md](docs/agent_integration.md) for how to use arxiv-brew with LLM agents (Claude Code, Codex, OpenClaw, etc.).
 
-## Bash wrapper (optional)
+## CLI reference
 
-A convenience script `arxiv-brew` wraps the Python commands:
+Installed via `pip install .`:
 
-```bash
-chmod +x arxiv-brew
-arxiv-brew init
-arxiv-brew run --digest-only
-arxiv-brew db status
-```
+| Command | Description |
+|---|---|
+| `arxiv-brew` | Full pipeline |
+| `arxiv-brew init` | Set up config/my_research.md |
+| `arxiv-pull` | Pull and filter today's papers |
+| `arxiv-download` | Download full text |
+| `arxiv-summarize` | Generate digest |
+| `arxiv-db` | Archive management (status, cleanup) |
+
+All commands support `--help`.
 
 ## License
 

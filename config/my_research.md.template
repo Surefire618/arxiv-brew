@@ -1,7 +1,7 @@
 # My Research Profile
 #
 # This file defines your arxiv-brew keywords. Edit the sections below.
-# Then run: python -m arxiv_brew --research-profile config/my_research.md --init-keywords --digest-only
+# Then run: arxiv-brew --research-profile config/my_research.md --init-keywords --digest-only
 
 ## Categories:
 # arXiv categories to scan daily.

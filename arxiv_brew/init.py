@@ -36,7 +36,7 @@ def run_init(config_dir: str = "config") -> int:
 
     print(f"\n{_P} Next steps:", file=sys.stderr)
     print(f"  1. Edit {profile}", file=sys.stderr)
-    print(f"  2. Run: python -m arxiv_brew --research-profile {profile} --init-keywords --digest-only", file=sys.stderr)
+    print(f"  2. Run: arxiv-brew --research-profile {profile} --init-keywords --digest-only", file=sys.stderr)
 
     return 0
 
@@ -45,7 +45,7 @@ _DEFAULT_TEMPLATE = """\
 # My Research Profile
 #
 # This file defines your arxiv-brew keywords. Edit the sections below.
-# Then run: python -m arxiv_brew --research-profile config/my_research.md --init-keywords --digest-only
+# Then run: arxiv-brew --research-profile config/my_research.md --init-keywords --digest-only
 
 ## Categories:
 # arXiv categories to scan daily.

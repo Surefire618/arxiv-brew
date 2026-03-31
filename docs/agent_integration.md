@@ -8,29 +8,31 @@ Filters today's new arXiv papers by keyword, downloads full text, and produces a
 
 ## Commands
 
-All commands work via `python -m arxiv_brew` or the optional `arxiv-brew` bash wrapper.
+Install: `pip install .` (or `pip install -e .` for development).
 
 ### First-time setup
 
 ```bash
-python -m arxiv_brew --research-profile config/my_research.md --init-keywords --digest-only
+arxiv-brew init
+# Edit config/my_research.md
+arxiv-brew --research-profile config/my_research.md --init-keywords --digest-only
 ```
 
 ### Daily run
 
 ```bash
 # Digest to stdout
-python -m arxiv_brew --digest-only
+arxiv-brew --digest-only
 
 # Full output with JSON
-python -m arxiv_brew --output result.json --paper-dir papers --digest-dir digests
+arxiv-brew --output result.json --paper-dir papers --digest-dir digests
 ```
 
 ### With LLM refinement (stage 2)
 
 ```bash
 # Step 1: pipeline generates a refinement prompt
-python -m arxiv_brew --output result.json --refine-prompt refine.txt
+arxiv-brew --output result.json --refine-prompt refine.txt
 
 # Step 2: agent sends refine.txt content to LLM, gets JSON response
 
@@ -40,8 +42,8 @@ python -m arxiv_brew --output result.json --refine-prompt refine.txt
 ### Archive cleanup
 
 ```bash
-python -m arxiv_brew.db cleanup --retention-days 14
-python -m arxiv_brew.db status
+arxiv-db cleanup --retention-days 14
+arxiv-db status
 ```
 
 ## Python API for stage 2
