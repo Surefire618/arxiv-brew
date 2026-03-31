@@ -49,12 +49,20 @@ def main(argv: list[str] | None = None) -> int:
     kw_db = KeywordDB(args.keyword_db)
 
     if args.bootstrap or not kw_db.data.get("clusters"):
-        print("[pull] Bootstrapping keyword database...", file=sys.stderr)
+        if not args.research_profile:
+            print("[pull] Error: no keyword database found.", file=sys.stderr)
+            print("[pull] Create config/my_research.md from the template, then run:", file=sys.stderr)
+            print("[pull]   ./arxiv-brew pull --research-profile config/my_research.md --bootstrap", file=sys.stderr)
+            return 1
+        print(f"[pull] Bootstrapping keyword DB from {args.research_profile}...", file=sys.stderr)
         kw_db.bootstrap(
             research_profile=args.research_profile,
             force=args.bootstrap,
         )
         stats = kw_db.stats()
+        if stats["total_keywords"] == 0:
+            print("[pull] Warning: no keywords extracted. Check your research profile format.", file=sys.stderr)
+            return 1
         print(f"[pull] Keywords: {stats['total_keywords']} total, "
               f"by source: {stats['by_source']}", file=sys.stderr)
 

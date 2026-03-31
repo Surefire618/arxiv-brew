@@ -1,14 +1,23 @@
 # My Research Profile
-# Copy this file to config/my_research.md and edit to match your interests.
-# This file is opt-in — arxiv-digest never reads your system files.
+# Copy to config/my_research.md and edit. This is the sole source of keywords.
 
-## Research areas:
-  - Example: condensed matter theory
-  - Example: computational materials science
-  - Example: machine learning for physics
+## My First Topic Cluster:
+  - example keyword
+  - another keyword
+  - ACRONYM
 
-## Additional keywords:
-# Add any terms you want the filter to match.
-# These will be added to the keyword database on bootstrap.
-  - example keyword one
-  - example keyword two
+## My Second Topic Cluster:
+  - keyword three
+  - keyword four
+
+## Word boundary keywords:
+# Short acronyms that should only match as whole words (e.g. "MACE" should not match "prevalence")
+  - ACRONYM
+
+## Broad keywords:
+# Keywords that are too generic on their own — only match when a context keyword also appears
+  - example broad term
+
+## Context keywords:
+# Required co-occurring terms for broad keywords to count as a match
+  - example context word
