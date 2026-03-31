@@ -1,4 +1,4 @@
-"""Local paper archive management: status, cleanup of old downloads."""
+"""Local paper archive management: status, cleanup, deduplication."""
 
 from __future__ import annotations
 
@@ -6,11 +6,47 @@ import argparse
 import json
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 from .config import Settings
 
 _P = "[brew]"
+
+
+class SeenIndex:
+    """Persistent set of previously processed paper IDs with timestamps."""
+
+    def __init__(self, path: str | Path = "config/seen.json"):
+        self.path = Path(path)
+        self._data: dict[str, str] = {}  # id -> date first seen
+        if self.path.exists():
+            try:
+                self._data = json.loads(self.path.read_text())
+            except (json.JSONDecodeError, ValueError):
+                self._data = {}
+
+    def __contains__(self, paper_id: str) -> bool:
+        return paper_id in self._data
+
+    def mark_seen(self, paper_ids: list[str]):
+        today = datetime.now().strftime("%Y-%m-%d")
+        for pid in paper_ids:
+            if pid not in self._data:
+                self._data[pid] = today
+
+    def prune(self, retention_days: int = 90):
+        """Remove entries older than retention_days to keep the index lean."""
+        cutoff = time.time() - (retention_days * 86400)
+        cutoff_date = datetime.fromtimestamp(cutoff).strftime("%Y-%m-%d")
+        self._data = {k: v for k, v in self._data.items() if v >= cutoff_date}
+
+    def save(self):
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(json.dumps(self._data, indent=2))
+
+    def __len__(self) -> int:
+        return len(self._data)
 
 
 class PaperDB:

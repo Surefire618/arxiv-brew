@@ -33,6 +33,7 @@ class Paper:
     html_url: str = ""
     pdf_url: str = ""
     matched_clusters: list[str] = field(default_factory=list)
+    relevance_score: float = 0.0
     affiliations: list[str] = field(default_factory=list)
     corresponding_author: Optional[str] = None
     content_path: Optional[str] = None
@@ -54,6 +55,7 @@ class Paper:
             "primary_category": self.primary_category, "version": self.version,
             "abs_url": self.abs_url, "html_url": self.html_url,
             "pdf_url": self.pdf_url, "matched_clusters": self.matched_clusters,
+            "relevance_score": self.relevance_score,
             "affiliations": self.affiliations,
             "corresponding_author": self.corresponding_author,
             "content_path": self.content_path,

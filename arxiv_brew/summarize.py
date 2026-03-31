@@ -94,6 +94,7 @@ def build_summary(paper: Paper, content: Optional[str] = None) -> dict:
         "abs_url": paper.abs_url,
         "categories": paper.categories,
         "matched_clusters": paper.matched_clusters,
+        "relevance_score": paper.relevance_score,
         "abstract": paper.abstract,
         "has_content": content is not None,
         "content_length": len(content) if content else 0,
@@ -104,8 +105,9 @@ def build_summary(paper: Paper, content: Optional[str] = None) -> dict:
 
 
 def format_digest_entry(s: dict) -> str:
+    score_str = f" (score: {s['relevance_score']})" if s.get("relevance_score") else ""
     lines = [
-        f"**{s['title']}**",
+        f"**{s['title']}**{score_str}",
         s["authors_full"],
     ]
     if s["affiliation_str"]:

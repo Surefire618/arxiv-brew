@@ -1,10 +1,10 @@
-"""Tests for the keyword filtering engine."""
+"""Tests for the keyword filtering and scoring engine."""
 
 import unittest
 
 from arxiv_brew.arxiv_api import Paper
 from arxiv_brew.config import FilterConfig
-from arxiv_brew.filter import match_clusters, keyword_filter
+from arxiv_brew.filter import score_paper, keyword_filter
 
 
 def _config():
@@ -27,27 +27,68 @@ def _p(title, abstract="", arxiv_id="2603.00001"):
     )
 
 
-class TestMatchClusters(unittest.TestCase):
+class TestScorePaper(unittest.TestCase):
     def test_exact_keyword_match(self):
-        self.assertIn("Thermal Transport", match_clusters(_p("Phonon transport in silicon from Green-Kubo"), _config()))
+        clusters, score = score_paper(
+            _p("Phonon transport in silicon from Green-Kubo"), _config())
+        self.assertIn("Thermal Transport", clusters)
+        self.assertGreater(score, 0)
 
     def test_acronym_word_boundary_no_false_positive(self):
-        self.assertEqual(match_clusters(_p("Prevalence of pharmaceutical contaminants"), _config()), [])
+        clusters, score = score_paper(
+            _p("Prevalence of pharmaceutical contaminants"), _config())
+        self.assertEqual(clusters, [])
+        self.assertEqual(score, 0)
 
     def test_acronym_real_match(self):
-        self.assertIn("ML Potentials", match_clusters(_p("Training MACE potentials for molecular dynamics"), _config()))
+        clusters, score = score_paper(
+            _p("Training MACE potentials for molecular dynamics"), _config())
+        self.assertIn("ML Potentials", clusters)
 
     def test_broad_keyword_needs_context(self):
-        self.assertEqual(match_clusters(_p("Thermal conductivity of concrete in building insulation"), _config()), [])
+        clusters, _ = score_paper(
+            _p("Thermal conductivity of concrete in building insulation"), _config())
+        self.assertEqual(clusters, [])
 
     def test_broad_keyword_with_context(self):
-        self.assertIn("Thermal Transport", match_clusters(_p("Thermal conductivity of perovskite", "phonon DFT calculation"), _config()))
+        clusters, _ = score_paper(
+            _p("Thermal conductivity of perovskite", "phonon DFT calculation"), _config())
+        self.assertIn("Thermal Transport", clusters)
 
     def test_no_match(self):
-        self.assertEqual(match_clusters(_p("Superconducting vortex dynamics in cuprates"), _config()), [])
+        clusters, score = score_paper(
+            _p("Superconducting vortex dynamics in cuprates"), _config())
+        self.assertEqual(clusters, [])
+        self.assertEqual(score, 0)
 
     def test_empty_config(self):
-        self.assertEqual(match_clusters(_p("Anything at all"), FilterConfig()), [])
+        clusters, score = score_paper(_p("Anything at all"), FilterConfig())
+        self.assertEqual(clusters, [])
+
+    def test_title_scores_higher_than_abstract(self):
+        """Same keyword in title should score higher than in abstract."""
+        _, title_score = score_paper(
+            _p("MACE potential for water"), _config())
+        _, abstract_score = score_paper(
+            _p("A study of potentials", abstract="MACE potential for water"), _config())
+        self.assertGreater(title_score, abstract_score)
+
+    def test_multiple_keyword_hits_increase_score(self):
+        """Hitting more keywords in a cluster should increase score."""
+        _, single_score = score_paper(
+            _p("MACE potential"), _config())
+        _, multi_score = score_paper(
+            _p("MACE and MLIP deep potential neural network potential"), _config())
+        self.assertGreater(multi_score, single_score)
+
+    def test_multi_cluster_bonus(self):
+        """Papers matching multiple clusters get a bonus."""
+        clusters, score = score_paper(
+            _p("MACE potential with phonon transport",
+               abstract="Green-Kubo thermal conductivity with DFT"), _config())
+        self.assertGreater(len(clusters), 1)
+        # Score should include the multi-cluster bonus
+        self.assertGreater(score, 5.0)
 
 
 class TestKeywordFilter(unittest.TestCase):
@@ -59,6 +100,16 @@ class TestKeywordFilter(unittest.TestCase):
         filtered = keyword_filter(papers, _config())
         self.assertEqual(len(filtered), 1)
         self.assertTrue(filtered[0].matched_clusters)
+        self.assertGreater(filtered[0].relevance_score, 0)
+
+    def test_results_sorted_by_score(self):
+        papers = [
+            _p("A study of potentials", abstract="MACE is used", arxiv_id="1"),
+            _p("MACE and MLIP deep potential neural network potential", arxiv_id="2"),
+        ]
+        filtered = keyword_filter(papers, _config())
+        self.assertEqual(len(filtered), 2)
+        self.assertGreaterEqual(filtered[0].relevance_score, filtered[1].relevance_score)
 
 
 if __name__ == "__main__":
