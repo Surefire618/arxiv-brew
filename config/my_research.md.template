@@ -1,0 +1,51 @@
+# My Research Profile
+#
+# This file defines your arxiv-brew keywords. Edit the sections below.
+# Then run: arxiv-brew --research-profile config/my_research.md --init-keywords --digest-only
+
+## Categories:
+# arXiv categories to scan daily.
+# Full list: https://arxiv.org/category_taxonomy
+  - cs.CL
+  - cs.AI
+
+## Natural Language Processing:
+  - language model
+  - transformer architecture
+  - attention mechanism
+  - machine translation
+  - text generation
+  - named entity recognition
+  - sentiment analysis
+  - question answering
+  - BERT
+  - GPT
+
+## Reinforcement Learning:
+  - reinforcement learning
+  - policy gradient
+  - reward model
+  - RLHF
+  - multi-agent
+
+## Word boundary keywords:
+# Short terms that must match as whole words only.
+# Example: "GAN" listed here won't match "organic" or "elegant".
+  - BERT
+  - GPT
+  - GAN
+  - RLHF
+
+## Broad keywords:
+# Generic terms that only count when a context keyword also appears.
+  - language model
+  - attention mechanism
+
+## Context keywords:
+# Required co-occurring terms for broad keywords.
+  - neural
+  - training
+  - benchmark
+  - dataset
+  - fine-tuning
+  - pre-training

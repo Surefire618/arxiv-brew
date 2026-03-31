@@ -1,0 +1,16 @@
+[project]
+name = "arxiv-brew"
+version = "0.1.0"
+description = "Keyword-based arXiv paper filtering and digest generation."
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+pdf = ["pymupdf>=1.23"]
+
+[project.scripts]
+arxiv-pull = "arxiv_brew.pull:main"
+arxiv-download = "arxiv_brew.download:main"
+arxiv-summarize = "arxiv_brew.summarize:main"
+arxiv-db = "arxiv_brew.db:main"
+arxiv-brew = "arxiv_brew.pipeline:main"
