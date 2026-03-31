@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .arxiv_api import fetch_new_ids_multi, fetch_metadata
-from .config import FilterConfig
+from .config import FilterConfig, resolve_config_dir
 from .db import SeenIndex
 from . import exitcodes as EC
 from .filter import keyword_filter, build_refinement_prompt
@@ -23,11 +23,14 @@ def main(argv: list[str] | None = None) -> int:
         prog="arxiv-pull",
         description="Pull and filter today's new arXiv papers.",
     )
+    parser.add_argument("--config-dir", metavar="DIR", default=None,
+                        help="Config directory (default: $ARXIV_BREW_CONFIG_DIR or ./config)")
     parser.add_argument("--categories", nargs="+", default=None)
     parser.add_argument("--keywords", metavar="FILE", help="Keyword config JSON")
     parser.add_argument("--research-profile", metavar="FILE",
-                        help="Research profile (e.g. config/my_research.md)")
-    parser.add_argument("--keyword-db", metavar="FILE", default="config/keywords.json")
+                        help="Research profile (default: <config-dir>/my_research.md)")
+    parser.add_argument("--keyword-db", metavar="FILE", default=None,
+                        help="Keyword database (default: <config-dir>/keywords.json)")
     parser.add_argument("--init-keywords", action="store_true",
                         help="Rebuild keyword DB from profile (rule-based, no LLM)")
     parser.add_argument("--output", "-o", metavar="FILE")
@@ -37,6 +40,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--refinement-prompt", metavar="FILE",
                         help="Write LLM refinement prompt to file")
     args = parser.parse_args(argv)
+
+    cfg_dir = resolve_config_dir(args.config_dir)
+    if not args.keyword_db:
+        args.keyword_db = str(cfg_dir / "keywords.json")
 
     kw_db = KeywordDB(args.keyword_db)
 
@@ -63,7 +70,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{_P} No categories configured. Add a ## Categories section to your research profile.", file=sys.stderr)
         return EC.CONFIG_ERROR
 
-    seen = SeenIndex()
+    seen = SeenIndex(cfg_dir / "seen.json")
 
     print(f"{_P} Scanning {len(config.categories)} categories...", file=sys.stderr)
     try:
