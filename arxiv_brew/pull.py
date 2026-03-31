@@ -32,8 +32,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="Rebuild keyword DB from profile (rule-based, no LLM)")
     parser.add_argument("--output", "-o", metavar="FILE")
     parser.add_argument("--all", action="store_true", help="Output all papers")
-    parser.add_argument("--no-dedup", action="store_true",
-                        help="Skip cross-day deduplication")
+    parser.add_argument("--no-dedup", "--force", action="store_true",
+                        help="Reprocess all papers, ignoring seen index")
     parser.add_argument("--refinement-prompt", metavar="FILE",
                         help="Write LLM refinement prompt to file")
     args = parser.parse_args(argv)
