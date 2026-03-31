@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Data (tracked separately or too large for git)
+papers/
+digests/
+
+# User data (opt-in, not tracked)
+config/my_research.md
+config/keywords.json
+
+# Environment
+.venv/
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db

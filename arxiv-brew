@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# arxiv-brew CLI wrapper
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PYTHON="${PYTHON:-python3}"
+
+usage() {
+    cat <<EOF
+arxiv-brew — Your daily arXiv paper filter.
+
+Usage:
+  arxiv-brew run [options]           Run full pipeline (default)
+  arxiv-brew pull [options]          Pull and filter today's papers
+  arxiv-brew download FILE [options] Download full text for filtered papers
+  arxiv-brew summarize FILE [options] Generate digest from downloaded papers
+  arxiv-brew db COMMAND              Database maintenance
+  arxiv-brew keywords                Show keyword DB stats
+  arxiv-brew version                 Show version
+
+Options are passed through to the underlying module.
+Run 'brew <command> --help' for command-specific options.
+
+Examples:
+  arxiv-brew run --digest-only
+  arxiv-brew run --research-profile config/my_research.md --bootstrap
+  arxiv-brew pull -o papers.json
+  arxiv-brew download papers.json -o downloaded.json
+  arxiv-brew summarize downloaded.json --digest-dir digests/
+EOF
+}
+
+cmd="${1:-help}"
+shift 2>/dev/null || true
+
+case "$cmd" in
+    run|pipeline)
+        exec "$PYTHON" -m arxiv_brew "$@"
+        ;;
+    pull)
+        exec "$PYTHON" -m arxiv_brew.pull "$@"
+        ;;
+    download)
+        exec "$PYTHON" -m arxiv_brew.download "$@"
+        ;;
+    summarize)
+        exec "$PYTHON" -m arxiv_brew.summarize "$@"
+        ;;
+    db)
+        exec "$PYTHON" -m arxiv_brew.db "$@"
+        ;;
+    keywords)
+        exec "$PYTHON" -c "
+from arxiv_brew.keywords import KeywordDB
+import json
+db = KeywordDB('config/keywords.json')
+if not db.data.get('clusters'):
+    print('No keyword DB yet. Run: brew run --bootstrap')
+else:
+    s = db.stats()
+    print(f'Keywords: {s[\"total_keywords\"]}')
+    print(f'Sources:  {s[\"by_source\"]}')
+    print(f'Clusters: {s[\"by_cluster\"]}')
+    print(f'Updated:  {s[\"last_updated\"]}')
+"
+        ;;
+    version|--version|-v)
+        exec "$PYTHON" -m arxiv_brew --version
+        ;;
+    help|--help|-h)
+        usage
+        ;;
+    *)
+        echo "Unknown command: $cmd"
+        usage
+        exit 1
+        ;;
+esac

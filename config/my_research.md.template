@@ -1,0 +1,14 @@
+# My Research Profile
+# Copy this file to config/my_research.md and edit to match your interests.
+# This file is opt-in — arxiv-digest never reads your system files.
+
+## Research areas:
+  - Example: condensed matter theory
+  - Example: computational materials science
+  - Example: machine learning for physics
+
+## Additional keywords:
+# Add any terms you want the filter to match.
+# These will be added to the keyword database on bootstrap.
+  - example keyword one
+  - example keyword two
