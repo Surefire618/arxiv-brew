@@ -29,7 +29,7 @@ def main(argv: list[str] | None = None) -> int:
                         help="Research profile (e.g. config/my_research.md)")
     parser.add_argument("--keyword-db", metavar="FILE", default="config/keywords.json")
     parser.add_argument("--init-keywords", action="store_true",
-                        help="Force re-initialize keyword DB from profile")
+                        help="Rebuild keyword DB from profile (rule-based, no LLM)")
     parser.add_argument("--output", "-o", metavar="FILE")
     parser.add_argument("--all", action="store_true", help="Output all papers")
     parser.add_argument("--no-dedup", action="store_true",

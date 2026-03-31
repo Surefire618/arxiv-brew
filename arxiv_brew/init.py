@@ -44,53 +44,70 @@ def run_init(config_dir: str = "config") -> int:
 _DEFAULT_TEMPLATE = """\
 # My Research Profile
 #
-# This file defines your arxiv-brew keywords. Edit the sections below.
-# Then run: arxiv-brew --research-profile config/my_research.md --init-keywords --digest-only
+# This file defines your arxiv-brew keywords and categories.
+# --init-keywords parses this file with pure rules (no LLM) to build
+# config/keywords.json. Re-run with --init-keywords after editing.
+#
+# Usage:
+#   arxiv-brew --research-profile config/my_research.md --init-keywords --digest-only
+#
+# ## File format
+#
+# - `## Categories:` — arXiv categories to scan (required)
+# - `## <Topic Name>:` — keyword cluster; each `- item` is a keyword
+# - `## Word boundary keywords:` — short acronyms matched as whole words only
+# - `## Broad keywords:` — generic terms that require a context keyword
+# - `## Context keywords:` — co-occurring terms that validate broad keywords
+#
+# Lines starting with # inside a section are ignored.
+# Keywords longer than 80 chars or containing backticks/braces are skipped.
 
 ## Categories:
 # arXiv categories to scan daily.
 # Full list: https://arxiv.org/category_taxonomy
-  - cs.CL
-  - cs.AI
+  - cond-mat.mtrl-sci
+  - physics.comp-ph
+  - cs.LG
 
-## Natural Language Processing:
-  - language model
-  - transformer architecture
-  - attention mechanism
-  - machine translation
-  - text generation
-  - named entity recognition
-  - sentiment analysis
-  - question answering
-  - BERT
-  - GPT
+## Thermal Transport:
+  - thermal conductivity
+  - lattice thermal conductivity
+  - phonon transport
+  - Green-Kubo
+  - Boltzmann transport equation
+  - anharmonic phonon
+  - phonon scattering
 
-## Reinforcement Learning:
-  - reinforcement learning
-  - policy gradient
-  - reward model
-  - RLHF
-  - multi-agent
+## ML Potentials:
+  - machine learning potential
+  - neural network potential
+  - MACE
+  - MLIP
+  - active learning
+  - molecular dynamics
 
 ## Word boundary keywords:
-# Short terms that must match as whole words only.
-# Example: "GAN" listed here won't match "organic" or "elegant".
-  - BERT
-  - GPT
+# Short terms (2-5 chars) that must match as whole words only.
+# Without this, "GAN" would match "organic" or "elegant".
+  - MACE
+  - MLIP
+  - BTE
+  - DFT
   - GAN
-  - RLHF
 
 ## Broad keywords:
 # Generic terms that only count when a context keyword also appears.
-  - language model
-  - attention mechanism
+# "thermal conductivity" alone matches too many non-physics papers.
+  - thermal conductivity
+  - machine learning
+  - molecular dynamics
 
 ## Context keywords:
-# Required co-occurring terms for broad keywords.
-  - neural
-  - training
-  - benchmark
-  - dataset
-  - fine-tuning
-  - pre-training
+# Required co-occurring terms for broad keywords above.
+  - phonon
+  - lattice
+  - first-principles
+  - ab initio
+  - potential energy surface
+  - interatomic potential
 """
