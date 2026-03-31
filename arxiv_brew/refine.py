@@ -36,7 +36,15 @@ def refine_papers(
         Dict with refined papers, learned keywords count, and digest.
     """
     data = json.loads(Path(candidates_json).read_text())
-    candidates = [Paper.from_dict(p) for p in data.get("summaries", data.get("papers", []))]
+    raw = data.get("summaries", data.get("papers", []))
+    candidates = []
+    for p in raw:
+        # Summaries have authors_full instead of authors, and lack some fields
+        if "authors" not in p and "authors_full" in p:
+            p = dict(p, authors=[p["authors_full"]])
+        for field, default in [("published", ""), ("updated", ""), ("primary_category", "")]:
+            p.setdefault(field, default)
+        candidates.append(Paper.from_dict(p))
 
     decisions, new_keywords = parse_refinement_response(llm_response)
     keyword_db = KeywordDB(keyword_db_path)
