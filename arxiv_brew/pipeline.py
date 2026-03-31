@@ -13,6 +13,7 @@ from . import __version__
 from .arxiv_api import fetch_new_ids_multi, fetch_metadata
 from .config import FilterConfig
 from .db import SeenIndex
+from . import exitcodes as EC
 from .filter import keyword_filter, build_refinement_prompt
 from .keywords import KeywordDB
 from .download import archive_paper, download_papers
@@ -60,13 +61,13 @@ def main(argv: list[str] | None = None) -> int:
         if not args.research_profile:
             print(f"{_P} No keyword database found.", file=sys.stderr)
             print(f"{_P} Run: arxiv-brew init", file=sys.stderr)
-            return 1
+            return EC.CONFIG_ERROR
         print(f"{_P} Initializing keywords from {args.research_profile}...", file=sys.stderr)
         kw_db.init_from_profile(args.research_profile, force=args.init_keywords)
         stats = kw_db.stats()
         if stats["total_keywords"] == 0:
             print(f"{_P} No keywords extracted. Check your research profile.", file=sys.stderr)
-            return 1
+            return EC.CONFIG_ERROR
         print(f"{_P} Keywords: {stats['total_keywords']} ({stats['by_source']})", file=sys.stderr)
 
     config = kw_db.to_filter_config()
@@ -76,12 +77,16 @@ def main(argv: list[str] | None = None) -> int:
         config.categories = args.categories
     if not config.categories:
         print(f"{_P} No categories configured. Add a ## Categories section to your research profile.", file=sys.stderr)
-        return 1
+        return EC.CONFIG_ERROR
 
     seen = SeenIndex()
 
     print(f"{_P} {date} — scanning {len(config.categories)} categories", file=sys.stderr)
-    all_ids = fetch_new_ids_multi(config.categories)
+    try:
+        all_ids = fetch_new_ids_multi(config.categories)
+    except Exception as e:
+        print(f"{_P} Network error fetching paper IDs: {e}", file=sys.stderr)
+        return EC.NETWORK_ERROR
     print(f"{_P} {len(all_ids)} new papers", file=sys.stderr)
 
     if not args.no_dedup:
@@ -94,9 +99,13 @@ def main(argv: list[str] | None = None) -> int:
     if not all_ids:
         if args.digest_only:
             print("No relevant papers today.")
-        return 0
+        return EC.NO_MATCHES
 
-    papers = fetch_metadata(all_ids)
+    try:
+        papers = fetch_metadata(all_ids)
+    except Exception as e:
+        print(f"{_P} Network error fetching metadata: {e}", file=sys.stderr)
+        return EC.NETWORK_ERROR
     print(f"{_P} Metadata for {len(papers)}", file=sys.stderr)
 
     filtered = keyword_filter(papers, config, kw_db)
@@ -119,7 +128,7 @@ def main(argv: list[str] | None = None) -> int:
     if not filtered:
         if args.digest_only:
             print("No relevant papers today.")
-        return 0
+        return EC.NO_MATCHES
 
     base_dir = Path(args.paper_dir)
     download_papers(filtered, base_dir)
@@ -138,7 +147,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.digest_only:
         print(digest_text)
-        return 0
+        return EC.SUCCESS
 
     result = {
         "date": date,
@@ -155,7 +164,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print(text)
 
-    return 0
+    return EC.SUCCESS
 
 
 if __name__ == "__main__":

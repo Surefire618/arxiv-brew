@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 from .arxiv_api import Paper
+from . import exitcodes as EC
 from .filter import parse_refinement_response, apply_refinement
 from .keywords import KeywordDB
 
@@ -69,16 +70,16 @@ def main(argv: list[str] | None = None) -> int:
         llm_text = Path(args.llm_response).read_text()
     except FileNotFoundError:
         print(f"{_P} LLM response file not found: {args.llm_response}", file=sys.stderr)
-        return 2
+        return EC.CONFIG_ERROR
 
     try:
         result = refine_papers(args.candidates, llm_text, args.keyword_db)
     except FileNotFoundError:
         print(f"{_P} Candidates file not found: {args.candidates}", file=sys.stderr)
-        return 2
+        return EC.CONFIG_ERROR
     except json.JSONDecodeError:
         print(f"{_P} Invalid JSON in candidates file: {args.candidates}", file=sys.stderr)
-        return 4
+        return EC.PARSE_ERROR
 
     print(f"{_P} Stage 2: {result['stage1_count']} → {result['stage2_count']} papers", file=sys.stderr)
     print(f"{_P} Learned {result['keywords_learned']} new keywords", file=sys.stderr)
@@ -90,7 +91,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print(text)
 
-    return 0
+    return EC.SUCCESS
 
 
 if __name__ == "__main__":
