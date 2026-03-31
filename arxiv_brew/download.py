@@ -59,7 +59,8 @@ def archive_paper(paper: Paper, base_dir: Path) -> Paper:
 
 
 def download_papers(papers: list[Paper], base_dir: Path,
-                    max_workers: int = _MAX_WORKERS) -> list[Paper]:
+                    max_workers: int = _MAX_WORKERS,
+                    quiet: bool = False) -> list[Paper]:
     """Download papers concurrently with rate limiting."""
     rate_lock = threading.Lock()
     last_request = [0.0]  # mutable for closure
@@ -91,11 +92,13 @@ def download_papers(papers: list[Paper], base_dir: Path,
             futures = {pool.submit(_rate_limited_archive, p): p for p in to_download}
             for future in as_completed(futures):
                 paper = future.result()
-                label = paper.download_status.upper()
-                print(f"  [{label}] {paper.id}", file=sys.stderr)
+                if not quiet:
+                    label = paper.download_status.upper()
+                    print(f"  [{label}] {paper.id}", file=sys.stderr)
 
-    for paper in cached:
-        print(f"  [CACHED] {paper.id}", file=sys.stderr)
+    if not quiet:
+        for paper in cached:
+            print(f"  [CACHED] {paper.id}", file=sys.stderr)
 
     return papers
 
