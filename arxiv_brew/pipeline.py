@@ -46,8 +46,10 @@ def main(argv: list[str] | None = None) -> int:
                         help="Rebuild keyword DB from profile (rule-based, no LLM)")
     parser.add_argument("--paper-dir", default="papers")
     parser.add_argument("--digest-dir", default="digests")
-    parser.add_argument("--output", "-o", default=None)
-    parser.add_argument("--digest-only", action="store_true")
+    parser.add_argument("--output", "-o", default=None,
+                        help="Write full JSON to file (composable with --digest-only)")
+    parser.add_argument("--digest-only", action="store_true",
+                        help="Print digest to stdout instead of JSON")
     parser.add_argument("--no-dedup", action="store_true",
                         help="Skip cross-day deduplication")
     parser.add_argument("--refine-prompt", metavar="FILE",
@@ -145,10 +147,6 @@ def main(argv: list[str] | None = None) -> int:
     digest_dir.mkdir(parents=True, exist_ok=True)
     (digest_dir / f"{date}.md").write_text(digest_text)
 
-    if args.digest_only:
-        print(digest_text)
-        return EC.SUCCESS
-
     result = {
         "date": date,
         "total_scanned": len(papers),
@@ -158,11 +156,15 @@ def main(argv: list[str] | None = None) -> int:
         "digest_text": digest_text,
     }
 
-    text = json.dumps(result, ensure_ascii=False, indent=2)
+    # --output always writes full JSON to file when specified
     if args.output:
-        Path(args.output).write_text(text)
-    else:
-        print(text)
+        Path(args.output).write_text(json.dumps(result, ensure_ascii=False, indent=2))
+
+    # stdout: --digest-only prints digest text, otherwise prints full JSON
+    if args.digest_only:
+        print(digest_text)
+    elif not args.output:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
 
     return EC.SUCCESS
 
