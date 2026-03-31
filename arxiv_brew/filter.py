@@ -16,6 +16,11 @@ from .config import FilterConfig
 from .keywords import KeywordDB
 
 
+_TITLE_WEIGHT = 3.0
+_ABSTRACT_WEIGHT = 1.0
+_MULTI_CLUSTER_BONUS = 2.0
+
+
 def _keyword_in_text(kw: str, text: str, config: FilterConfig) -> bool:
     kw_lower = kw.lower()
     if kw in config.word_boundary_keywords:
@@ -23,38 +28,69 @@ def _keyword_in_text(kw: str, text: str, config: FilterConfig) -> bool:
     return kw_lower in text
 
 
-def match_clusters(paper: Paper, config: FilterConfig) -> list[str]:
-    text = (paper.title + " " + paper.abstract).lower()
-    matched: list[str] = []
+def _is_broad_blocked(kw: str, text: str, config: FilterConfig) -> bool:
+    """Return True if kw is a broad keyword and no context keyword co-occurs."""
+    if kw.lower() in {b.lower() for b in config.broad_keywords}:
+        if not any(ck.lower() in text for ck in config.context_keywords):
+            return True
+    return False
+
+
+def score_paper(paper: Paper, config: FilterConfig) -> tuple[list[str], float]:
+    """Score a paper's relevance. Returns (matched_clusters, score).
+
+    Scoring:
+    - Each keyword hit in the title: +3.0
+    - Each keyword hit in the abstract: +1.0
+    - Matching multiple clusters: +2.0 bonus per extra cluster
+    """
+    title = paper.title.lower()
+    abstract = paper.abstract.lower()
+    full_text = title + " " + abstract
+
+    matched_clusters: list[str] = []
+    score = 0.0
 
     for cluster_name, keywords in config.topic_clusters.items():
+        cluster_score = 0.0
+        cluster_hit = False
         for kw in keywords:
-            if not _keyword_in_text(kw, text, config):
+            if not _keyword_in_text(kw, full_text, config):
                 continue
-            if kw.lower() in {b.lower() for b in config.broad_keywords}:
-                if not any(ck.lower() in text for ck in config.context_keywords):
-                    continue
-            matched.append(cluster_name)
-            break
+            if _is_broad_blocked(kw, full_text, config):
+                continue
+            cluster_hit = True
+            if _keyword_in_text(kw, title, config):
+                cluster_score += _TITLE_WEIGHT
+            elif _keyword_in_text(kw, abstract, config):
+                cluster_score += _ABSTRACT_WEIGHT
+        if cluster_hit:
+            matched_clusters.append(cluster_name)
+            score += cluster_score
 
-    return matched
+    if len(matched_clusters) > 1:
+        score += _MULTI_CLUSTER_BONUS * (len(matched_clusters) - 1)
+
+    return matched_clusters, round(score, 2)
 
 
 def keyword_filter(papers: list[Paper], config: FilterConfig,
                    keyword_db: Optional[KeywordDB] = None) -> list[Paper]:
     filtered: list[Paper] = []
     for paper in papers:
-        clusters = match_clusters(paper, config)
+        clusters, score = score_paper(paper, config)
         if clusters:
             paper.matched_clusters = clusters
+            paper.relevance_score = score
             filtered.append(paper)
             if keyword_db:
-                text = (paper.title + " " + paper.abstract).lower()
+                full_text = (paper.title + " " + paper.abstract).lower()
                 for cluster in clusters:
                     for kw in config.topic_clusters.get(cluster, []):
-                        if _keyword_in_text(kw, text, config):
+                        if _keyword_in_text(kw, full_text, config):
                             keyword_db.record_hit(cluster, kw)
-                            break
+
+    filtered.sort(key=lambda p: p.relevance_score, reverse=True)
     return filtered
 
 

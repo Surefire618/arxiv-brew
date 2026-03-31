@@ -10,6 +10,7 @@ from pathlib import Path
 
 from .arxiv_api import fetch_new_ids_multi, fetch_metadata
 from .config import FilterConfig
+from .db import SeenIndex
 from .filter import keyword_filter, build_refinement_prompt
 from .keywords import KeywordDB
 
@@ -30,6 +31,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="Force re-initialize keyword DB from profile")
     parser.add_argument("--output", "-o", metavar="FILE")
     parser.add_argument("--all", action="store_true", help="Output all papers")
+    parser.add_argument("--no-dedup", action="store_true",
+                        help="Skip cross-day deduplication")
     parser.add_argument("--refinement-prompt", metavar="FILE",
                         help="Write LLM refinement prompt to file")
     args = parser.parse_args(argv)
@@ -59,9 +62,18 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{_P} No categories configured. Add a ## Categories section to your research profile.", file=sys.stderr)
         return 1
 
+    seen = SeenIndex()
+
     print(f"{_P} Scanning {len(config.categories)} categories...", file=sys.stderr)
     all_ids = fetch_new_ids_multi(config.categories)
     print(f"{_P} {len(all_ids)} unique new papers", file=sys.stderr)
+
+    if not args.no_dedup:
+        before = len(all_ids)
+        all_ids = [pid for pid in all_ids if pid not in seen]
+        skipped = before - len(all_ids)
+        if skipped:
+            print(f"{_P} {skipped} already seen, {len(all_ids)} remaining", file=sys.stderr)
 
     if not all_ids:
         result = {"date": datetime.now().strftime("%Y-%m-%d"), "papers": []}
@@ -79,10 +91,14 @@ def main(argv: list[str] | None = None) -> int:
         filtered = keyword_filter(papers, config, kw_db)
         kw_db.save()
 
+    seen.mark_seen([p.id for p in papers])
+    seen.prune()
+    seen.save()
+
     print(f"{_P} {len(filtered)} papers matched", file=sys.stderr)
     for p in filtered:
         clusters = ", ".join(p.matched_clusters)
-        print(f"  ✓ [{clusters}] {p.id}: {p.title[:70]}", file=sys.stderr)
+        print(f"  ✓ [{clusters}] ({p.relevance_score}) {p.id}: {p.title[:60]}", file=sys.stderr)
 
     if args.refinement_prompt and filtered:
         prompt = build_refinement_prompt(filtered)

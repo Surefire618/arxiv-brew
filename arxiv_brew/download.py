@@ -8,13 +8,16 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from .arxiv_api import Paper, download_html, download_pdf_text
 
 _P = "[brew]"
 _DOWNLOAD_DELAY = 1.5
+_MAX_WORKERS = 4
 
 
 def archive_paper(paper: Paper, base_dir: Path) -> Paper:
@@ -55,6 +58,48 @@ def archive_paper(paper: Paper, base_dir: Path) -> Paper:
     return paper
 
 
+def download_papers(papers: list[Paper], base_dir: Path,
+                    max_workers: int = _MAX_WORKERS) -> list[Paper]:
+    """Download papers concurrently with rate limiting."""
+    rate_lock = threading.Lock()
+    last_request = [0.0]  # mutable for closure
+
+    def _rate_limited_archive(paper: Paper) -> Paper:
+        with rate_lock:
+            elapsed = time.monotonic() - last_request[0]
+            if elapsed < _DOWNLOAD_DELAY:
+                time.sleep(_DOWNLOAD_DELAY - elapsed)
+            last_request[0] = time.monotonic()
+        archive_paper(paper, base_dir)
+        return paper
+
+    # Separate cached (no download needed) from uncached
+    cached = []
+    to_download = []
+    for paper in papers:
+        date_prefix = paper.published[:7] if paper.published else "unknown"
+        paper_dir = base_dir / date_prefix / paper.id.replace("/", "_")
+        content_path = paper_dir / "content.md"
+        if content_path.exists() and content_path.stat().st_size > 500:
+            archive_paper(paper, base_dir)  # sets cached status
+            cached.append(paper)
+        else:
+            to_download.append(paper)
+
+    if to_download:
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = {pool.submit(_rate_limited_archive, p): p for p in to_download}
+            for future in as_completed(futures):
+                paper = future.result()
+                label = paper.download_status.upper()
+                print(f"  [{label}] {paper.id}", file=sys.stderr)
+
+    for paper in cached:
+        print(f"  [CACHED] {paper.id}", file=sys.stderr)
+
+    return papers
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="arxiv-download",
@@ -63,6 +108,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("input", help="JSON from pull step (or - for stdin)")
     parser.add_argument("--paper-dir", default="papers")
     parser.add_argument("--output", "-o", default=None)
+    parser.add_argument("--workers", type=int, default=_MAX_WORKERS,
+                        help=f"Concurrent download threads (default: {_MAX_WORKERS})")
     args = parser.parse_args(argv)
 
     data = json.load(sys.stdin) if args.input == "-" else json.loads(Path(args.input).read_text())
@@ -70,13 +117,7 @@ def main(argv: list[str] | None = None) -> int:
     base_dir = Path(args.paper_dir)
 
     print(f"{_P} Downloading {len(papers)} papers...", file=sys.stderr)
-
-    for i, paper in enumerate(papers):
-        archive_paper(paper, base_dir)
-        label = "SKIP" if paper.download_status == "cached" else paper.download_status.upper()
-        print(f"  [{label}] {paper.id}", file=sys.stderr)
-        if i < len(papers) - 1 and paper.download_status != "cached":
-            time.sleep(_DOWNLOAD_DELAY)
+    download_papers(papers, base_dir, max_workers=args.workers)
 
     ok = sum(1 for p in papers if p.download_status.startswith("ok"))
     cached = sum(1 for p in papers if p.download_status == "cached")

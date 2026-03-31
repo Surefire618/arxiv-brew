@@ -12,9 +12,10 @@ from pathlib import Path
 from . import __version__
 from .arxiv_api import fetch_new_ids_multi, fetch_metadata
 from .config import FilterConfig
+from .db import SeenIndex
 from .filter import keyword_filter, build_refinement_prompt
 from .keywords import KeywordDB
-from .download import archive_paper
+from .download import archive_paper, download_papers
 from .summarize import build_summary, format_digest
 
 _P = "[brew]"
@@ -43,6 +44,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--digest-dir", default="digests")
     parser.add_argument("--output", "-o", default=None)
     parser.add_argument("--digest-only", action="store_true")
+    parser.add_argument("--no-dedup", action="store_true",
+                        help="Skip cross-day deduplication")
     parser.add_argument("--refine-prompt", metavar="FILE",
                         help="Write LLM refinement prompt for stage 2")
     args = parser.parse_args(argv)
@@ -72,9 +75,18 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{_P} No categories configured. Add a ## Categories section to your research profile.", file=sys.stderr)
         return 1
 
+    seen = SeenIndex()
+
     print(f"{_P} {date} — scanning {len(config.categories)} categories", file=sys.stderr)
     all_ids = fetch_new_ids_multi(config.categories)
     print(f"{_P} {len(all_ids)} new papers", file=sys.stderr)
+
+    if not args.no_dedup:
+        before = len(all_ids)
+        all_ids = [pid for pid in all_ids if pid not in seen]
+        skipped = before - len(all_ids)
+        if skipped:
+            print(f"{_P} {skipped} already seen, {len(all_ids)} remaining", file=sys.stderr)
 
     if not all_ids:
         if args.digest_only:
@@ -86,9 +98,15 @@ def main(argv: list[str] | None = None) -> int:
 
     filtered = keyword_filter(papers, config, kw_db)
     kw_db.save()
+
+    # Mark all fetched IDs as seen (not just filtered) to avoid re-scanning
+    seen.mark_seen([p.id for p in papers])
+    seen.prune()
+    seen.save()
+
     print(f"{_P} {len(filtered)} matched", file=sys.stderr)
     for p in filtered:
-        print(f"  ✓ [{', '.join(p.matched_clusters)}] {p.id}: {p.title[:65]}", file=sys.stderr)
+        print(f"  ✓ [{', '.join(p.matched_clusters)}] ({p.relevance_score}) {p.id}: {p.title[:60]}", file=sys.stderr)
 
     if args.refine_prompt and filtered:
         prompt = build_refinement_prompt(filtered)
@@ -101,11 +119,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     base_dir = Path(args.paper_dir)
-    for i, paper in enumerate(filtered):
-        archive_paper(paper, base_dir)
-        print(f"  [{paper.download_status}] {paper.id}", file=sys.stderr)
-        if i < len(filtered) - 1 and paper.download_status != "cached":
-            time.sleep(1.5)
+    download_papers(filtered, base_dir)
 
     summaries = []
     for paper in filtered:
