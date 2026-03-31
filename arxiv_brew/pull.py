@@ -1,16 +1,4 @@
-"""
-arxiv_new_pull — Discover and filter today's new arXiv papers.
-
-Two-stage filtering:
-  Stage 1: Keyword matching (fast, local, always runs)
-  Stage 2: LLM refinement (optional, when --refine-prompt is set)
-
-Keyword sources (merged in order):
-  1. Built-in defaults
-  2. --keywords FILE (explicit keyword config)
-  3. --research-profile FILE (opt-in user research profile)
-  4. Keyword DB (config/keywords.json — grows over time via LLM feedback)
-"""
+"""Discover and filter today's new arXiv papers."""
 
 from __future__ import annotations
 
@@ -25,6 +13,8 @@ from .config import FilterConfig
 from .filter import keyword_filter, build_refinement_prompt
 from .keywords import KeywordDB
 
+_P = "[brew]"
+
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
@@ -34,37 +24,30 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--categories", nargs="+", default=None)
     parser.add_argument("--keywords", metavar="FILE", help="Keyword config JSON")
     parser.add_argument("--research-profile", metavar="FILE",
-                        help="User-created research profile (e.g. config/my_research.md)")
-    parser.add_argument("--keyword-db", metavar="FILE", default="config/keywords.json",
-                        help="Keyword database path (default: config/keywords.json)")
-    parser.add_argument("--bootstrap", action="store_true",
-                        help="Force re-bootstrap keyword DB")
+                        help="Research profile (e.g. config/my_research.md)")
+    parser.add_argument("--keyword-db", metavar="FILE", default="config/keywords.json")
+    parser.add_argument("--init-keywords", action="store_true",
+                        help="Force re-initialize keyword DB from profile")
     parser.add_argument("--output", "-o", metavar="FILE")
     parser.add_argument("--all", action="store_true", help="Output all papers")
     parser.add_argument("--refinement-prompt", metavar="FILE",
-                        help="Write LLM refinement prompt to file (for stage 2)")
+                        help="Write LLM refinement prompt to file")
     args = parser.parse_args(argv)
 
-    # ── Build keyword DB ──
     kw_db = KeywordDB(args.keyword_db)
 
-    if args.bootstrap or not kw_db.data.get("clusters"):
+    if args.init_keywords or not kw_db.data.get("clusters"):
         if not args.research_profile:
-            print("[pull] Error: no keyword database found.", file=sys.stderr)
-            print("[pull] Create config/my_research.md from the template, then run:", file=sys.stderr)
-            print("[pull]   ./arxiv-brew pull --research-profile config/my_research.md --bootstrap", file=sys.stderr)
+            print(f"{_P} No keyword database found.", file=sys.stderr)
+            print(f"{_P} Run: arxiv-brew init", file=sys.stderr)
             return 1
-        print(f"[pull] Bootstrapping keyword DB from {args.research_profile}...", file=sys.stderr)
-        kw_db.bootstrap(
-            research_profile=args.research_profile,
-            force=args.bootstrap,
-        )
+        print(f"{_P} Initializing keywords from {args.research_profile}...", file=sys.stderr)
+        kw_db.init_from_profile(args.research_profile, force=args.init_keywords)
         stats = kw_db.stats()
         if stats["total_keywords"] == 0:
-            print("[pull] Warning: no keywords extracted. Check your research profile format.", file=sys.stderr)
+            print(f"{_P} No keywords extracted. Check your research profile format.", file=sys.stderr)
             return 1
-        print(f"[pull] Keywords: {stats['total_keywords']} total, "
-              f"by source: {stats['by_source']}", file=sys.stderr)
+        print(f"{_P} Keywords: {stats['total_keywords']} ({stats['by_source']})", file=sys.stderr)
 
     config = kw_db.to_filter_config()
 
@@ -72,11 +55,13 @@ def main(argv: list[str] | None = None) -> int:
         config = config.merge(FilterConfig.from_file(args.keywords))
     if args.categories:
         config.categories = args.categories
+    if not config.categories:
+        print(f"{_P} No categories configured. Add a ## Categories section to your research profile.", file=sys.stderr)
+        return 1
 
-    # ── Pull ──
-    print(f"[pull] Scanning {len(config.categories)} categories...", file=sys.stderr)
+    print(f"{_P} Scanning {len(config.categories)} categories...", file=sys.stderr)
     all_ids = fetch_new_ids_multi(config.categories)
-    print(f"[pull] {len(all_ids)} unique new papers", file=sys.stderr)
+    print(f"{_P} {len(all_ids)} unique new papers", file=sys.stderr)
 
     if not all_ids:
         result = {"date": datetime.now().strftime("%Y-%m-%d"), "papers": []}
@@ -84,9 +69,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     papers = fetch_metadata(all_ids)
-    print(f"[pull] Metadata for {len(papers)} papers", file=sys.stderr)
+    print(f"{_P} Metadata for {len(papers)} papers", file=sys.stderr)
 
-    # ── Stage 1: Keyword filter ──
     if args.all:
         for p in papers:
             p.matched_clusters = []
@@ -95,16 +79,15 @@ def main(argv: list[str] | None = None) -> int:
         filtered = keyword_filter(papers, config, kw_db)
         kw_db.save()
 
-    print(f"[pull] Stage 1: {len(filtered)} papers matched", file=sys.stderr)
+    print(f"{_P} {len(filtered)} papers matched", file=sys.stderr)
     for p in filtered:
         clusters = ", ".join(p.matched_clusters)
         print(f"  ✓ [{clusters}] {p.id}: {p.title[:70]}", file=sys.stderr)
 
-    # ── Stage 2 prep ──
     if args.refinement_prompt and filtered:
         prompt = build_refinement_prompt(filtered)
         Path(args.refinement_prompt).write_text(prompt)
-        print(f"[pull] Refinement prompt → {args.refinement_prompt}", file=sys.stderr)
+        print(f"{_P} Refinement prompt → {args.refinement_prompt}", file=sys.stderr)
 
     result = {
         "date": datetime.now().strftime("%Y-%m-%d"),
@@ -123,7 +106,7 @@ def _output(data: dict, path: str | None):
     if path:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         Path(path).write_text(text)
-        print(f"[pull] Saved to {path}", file=sys.stderr)
+        print(f"{_P} Saved to {path}", file=sys.stderr)
     else:
         print(text)
 

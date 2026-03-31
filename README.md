@@ -2,7 +2,23 @@
 
 Keyword-based arXiv paper filtering and digest generation. Designed to be called by LLM agents for automated daily literature monitoring.
 
-Pulls today's new submissions from configurable arXiv categories, filters against a persistent keyword database, downloads full text, and outputs a structured digest. The pipeline runs standalone, but is built to integrate with agent workflows that add LLM-powered refinement and summarization.
+## How it works
+
+```mermaid
+flowchart LR
+    A[arxiv.org/list/new] -->|scrape IDs| B[Atom API]
+    B -->|metadata| C{Keyword Filter}
+    C -->|matched| D[Download HTML/PDF]
+    D --> E[Generate Digest]
+    C -.->|optional| F[LLM Refinement]
+    F -.->|decisions + new keywords| C
+```
+
+1. **Pull** — scrapes today's new submissions from configured arXiv categories, fetches metadata via Atom API
+2. **Filter** — matches paper titles and abstracts against your keyword database. Supports word-boundary matching for acronyms and context-aware broad keywords
+3. **Download** — fetches full text (HTML preferred, PDF fallback)
+4. **Summarize** — extracts affiliations, formats digest grouped by topic cluster
+5. **(Optional) LLM Refinement** — an agent can judge candidates and suggest new keywords, which are persisted for future matching
 
 ## Install
 
@@ -13,64 +29,66 @@ cd arxiv-brew
 
 Python 3.10+, stdlib only. No external dependencies.
 
+## Quick start
+
+```bash
+# 1. Create your research profile
+python -m arxiv_brew.init
+# Edit config/my_research.md with your topics and keywords
+
+# 2. Initialize keywords and run
+python -m arxiv_brew --research-profile config/my_research.md --init-keywords --digest-only
+```
+
 ## Usage
 
-### Run the pipeline
-
 ```bash
-# Print today's digest to stdout
-./arxiv-brew run --digest-only
+# Daily digest to stdout
+python -m arxiv_brew --digest-only
 
 # Full pipeline with file output
-./arxiv-brew run --output result.json --paper-dir papers --digest-dir digests
+python -m arxiv_brew --output result.json --paper-dir papers --digest-dir digests
+
+# Step-by-step
+python -m arxiv_brew.pull -o papers.json
+python -m arxiv_brew.download papers.json -o downloaded.json
+python -m arxiv_brew.summarize downloaded.json --digest-dir digests/
+
+# Archive management
+python -m arxiv_brew.db status
+python -m arxiv_brew.db cleanup --retention-days 14
+
+# Show keyword stats
+python -m arxiv_brew.keywords
 ```
-
-### Personalize
-
-```bash
-cp config/my_research.md.template config/my_research.md
-# Edit with your research interests, then:
-./arxiv-brew run --research-profile config/my_research.md --bootstrap --digest-only
-```
-
-### Step by step
-
-```bash
-./arxiv-brew pull -o papers.json
-./arxiv-brew download papers.json -o downloaded.json
-./arxiv-brew summarize downloaded.json --digest-dir digests/
-```
-
-### Agent integration
-
-The pipeline produces structured JSON output and optional LLM refinement prompts. An agent can:
-
-1. Run the pipeline and get filtered candidates
-2. Use the refinement prompt to judge relevance and suggest new keywords
-3. Feed keywords back — they are persisted for future runs, reducing LLM dependency over time
-
-```bash
-./arxiv-brew run --output result.json --refine-prompt refine.txt
-```
-
-See [docs/agent_integration.md](docs/agent_integration.md) for the full workflow.
-
-## How it works
-
-1. **Pull** — scrapes `arxiv.org/list/{category}/new`, fetches metadata via Atom API
-2. **Filter** — two-stage: keyword matching (always), LLM refinement (optional)
-3. **Download** — full text via HTML (preferred) or PDF fallback
-4. **Summarize** — extracts affiliations, formats digest grouped by topic cluster
-
-The keyword database grows over time via LLM feedback — new terms discovered during refinement are persisted for future matching.
 
 ## Configuration
 
-Default categories: `cond-mat.mtrl-sci`, `cond-mat.stat-mech`, `physics.comp-ph`
+All keywords and categories come from your research profile (`config/my_research.md`). See [`config/my_research.md.template`](config/my_research.md.template) for the format.
 
-Default topic clusters: ML for Atomistic Modeling, Transport Methods, Anharmonic Thermodynamics
+The profile defines:
+- **Categories** — which arXiv categories to scan (e.g. `cs.CL`, `cond-mat.mtrl-sci`)
+- **Topic clusters** — groups of keywords (e.g. "NLP", "Reinforcement Learning")
+- **Word boundary keywords** — short acronyms matched as whole words only
+- **Broad keywords** — generic terms that require a context keyword to co-occur
+- **Context keywords** — terms that validate broad keyword matches
 
-Override with `--categories`, `--keywords FILE`, or `--research-profile FILE`.
+Run `python -m arxiv_brew --init-keywords --research-profile config/my_research.md` after editing your profile to rebuild the keyword database.
+
+## Agent integration
+
+See [docs/agent_integration.md](docs/agent_integration.md) for how to use arxiv-brew with LLM agents (Claude Code, Codex, OpenClaw, etc.).
+
+## Bash wrapper (optional)
+
+A convenience script `arxiv-brew` wraps the Python commands:
+
+```bash
+chmod +x arxiv-brew
+arxiv-brew init
+arxiv-brew run --digest-only
+arxiv-brew db status
+```
 
 ## License
 

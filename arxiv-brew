@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# arxiv-brew CLI wrapper
+# arxiv-brew CLI wrapper (optional convenience — all commands also work via python -m arxiv_brew)
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PYTHON="${PYTHON:-python3}"
 
 usage() {
@@ -10,23 +9,22 @@ usage() {
 arxiv-brew — Your daily arXiv paper filter.
 
 Usage:
+  arxiv-brew init                    Set up config/my_research.md
   arxiv-brew run [options]           Run full pipeline (default)
   arxiv-brew pull [options]          Pull and filter today's papers
   arxiv-brew download FILE [options] Download full text for filtered papers
   arxiv-brew summarize FILE [options] Generate digest from downloaded papers
-  arxiv-brew db COMMAND              Database maintenance
+  arxiv-brew db COMMAND              Paper archive management (status, cleanup)
   arxiv-brew keywords                Show keyword DB stats
   arxiv-brew version                 Show version
 
-Options are passed through to the underlying module.
-Run 'brew <command> --help' for command-specific options.
+Run 'arxiv-brew <command> --help' for command-specific options.
 
 Examples:
-  arxiv-brew run --digest-only
-  arxiv-brew run --research-profile config/my_research.md --bootstrap
+  arxiv-brew init
+  arxiv-brew run --research-profile config/my_research.md --init-keywords --digest-only
   arxiv-brew pull -o papers.json
-  arxiv-brew download papers.json -o downloaded.json
-  arxiv-brew summarize downloaded.json --digest-dir digests/
+  arxiv-brew db cleanup --retention-days 14
 EOF
 }
 
@@ -34,6 +32,9 @@ cmd="${1:-help}"
 shift 2>/dev/null || true
 
 case "$cmd" in
+    init)
+        exec "$PYTHON" -c "from arxiv_brew.init import run_init; raise SystemExit(run_init())"
+        ;;
     run|pipeline)
         exec "$PYTHON" -m arxiv_brew "$@"
         ;;
@@ -52,10 +53,9 @@ case "$cmd" in
     keywords)
         exec "$PYTHON" -c "
 from arxiv_brew.keywords import KeywordDB
-import json
 db = KeywordDB('config/keywords.json')
 if not db.data.get('clusters'):
-    print('No keyword DB yet. Run: brew run --bootstrap')
+    print('No keyword DB yet. Run: arxiv-brew init')
 else:
     s = db.stats()
     print(f'Keywords: {s[\"total_keywords\"]}')

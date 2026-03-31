@@ -1,23 +1,51 @@
 # My Research Profile
-# Copy to config/my_research.md and edit. This is the sole source of keywords.
+#
+# This file defines your arxiv-brew keywords. Edit the sections below.
+# Then run: python -m arxiv_brew --research-profile config/my_research.md --init-keywords --digest-only
 
-## My First Topic Cluster:
-  - example keyword
-  - another keyword
-  - ACRONYM
+## Categories:
+# arXiv categories to scan daily.
+# Full list: https://arxiv.org/category_taxonomy
+  - cs.CL
+  - cs.AI
 
-## My Second Topic Cluster:
-  - keyword three
-  - keyword four
+## Natural Language Processing:
+  - language model
+  - transformer architecture
+  - attention mechanism
+  - machine translation
+  - text generation
+  - named entity recognition
+  - sentiment analysis
+  - question answering
+  - BERT
+  - GPT
+
+## Reinforcement Learning:
+  - reinforcement learning
+  - policy gradient
+  - reward model
+  - RLHF
+  - multi-agent
 
 ## Word boundary keywords:
-# Short acronyms that should only match as whole words (e.g. "MACE" should not match "prevalence")
-  - ACRONYM
+# Short terms that must match as whole words only.
+# Example: "GAN" listed here won't match "organic" or "elegant".
+  - BERT
+  - GPT
+  - GAN
+  - RLHF
 
 ## Broad keywords:
-# Keywords that are too generic on their own — only match when a context keyword also appears
-  - example broad term
+# Generic terms that only count when a context keyword also appears.
+  - language model
+  - attention mechanism
 
 ## Context keywords:
-# Required co-occurring terms for broad keywords to count as a match
-  - example context word
+# Required co-occurring terms for broad keywords.
+  - neural
+  - training
+  - benchmark
+  - dataset
+  - fine-tuning
+  - pre-training

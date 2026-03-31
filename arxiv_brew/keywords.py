@@ -1,30 +1,4 @@
-"""
-Dynamic keyword database with learning.
-
-Manages a persistent keyword store that:
-  1. Bootstraps from the user's research profile (config/my_research.md)
-  2. Grows via LLM feedback (new terms discovered during refinement)
-  3. Tracks keyword provenance and hit counts for pruning
-
-No hardcoded domain-specific keywords — everything comes from the user.
-
-Schema (keywords.json):
-{
-  "clusters": {
-    "My Topic": {
-      "keywords": {
-        "some term": {"source": "user", "hits": 12, "added": "2026-03-31"},
-        "discovered term": {"source": "llm", "hits": 1, "added": "2026-04-02"},
-        ...
-      }
-    }
-  },
-  "context_keywords": [...],
-  "word_boundary_keywords": [...],
-  "broad_keywords": [...],
-  "last_updated": "2026-03-31"
-}
-"""
+"""Persistent keyword database with learning from LLM feedback."""
 
 from __future__ import annotations
 
@@ -36,9 +10,10 @@ from typing import Optional
 
 from .config import FilterConfig
 
+_P = "[brew]"
+
 
 class KeywordDB:
-    """Persistent, self-updating keyword database."""
 
     def __init__(self, path: str | Path = "config/keywords.json"):
         self.path = Path(path)
@@ -52,34 +27,24 @@ class KeywordDB:
         if self.path.exists():
             self.data = json.loads(self.path.read_text())
 
-    # ── Bootstrap ──
-
-    def bootstrap(
+    def init_from_profile(
         self,
-        research_profile: Optional[str | Path] = None,
+        research_profile: str | Path,
         force: bool = False,
     ):
-        """Initialize keyword DB from a user-created research profile.
-
-        The research profile (e.g. config/my_research.md) is the sole source
-        of keywords. There are no hardcoded defaults.
+        """Build keyword DB from a research profile.
 
         Args:
-            research_profile: Path to a markdown file with research interests.
-                Required on first bootstrap. See config/my_research.md.template.
-            force: Re-bootstrap even if DB already exists.
+            research_profile: Path to config/my_research.md.
+            force: Rebuild even if DB already has data.
         """
         if self.data.get("clusters") and not force:
-            return
-
-        if not research_profile:
             return
 
         path = Path(research_profile)
         if not path.exists():
             return
 
-        # Parse the research profile
         clusters, word_boundary, broad, context = self._parse_research_profile(path)
 
         for cluster_name, keywords in clusters.items():
@@ -112,45 +77,21 @@ class KeywordDB:
     def _parse_research_profile(
         self, path: Path
     ) -> tuple[dict[str, list[str]], set[str], set[str], list[str]]:
-        """Parse a research profile markdown file.
-
-        Expected format:
-        ```markdown
-        ## Topic Cluster Name:
-          - keyword one
-          - keyword two
-
-        ## Another Cluster:
-          - keyword three
-
-        ## Word boundary keywords:
-          - MACE
-          - MLIP
-
-        ## Broad keywords:
-          - thermal conductivity
-
-        ## Context keywords:
-          - phonon
-          - lattice
-        ```
-
-        Returns (clusters, word_boundary, broad, context).
-        """
+        """Parse research profile markdown into (clusters, word_boundary, broad, context)."""
         text = path.read_text()
         clusters: dict[str, list[str]] = {}
+        categories: list[str] = []
         word_boundary: set[str] = set()
         broad: set[str] = set()
         context: list[str] = []
 
         current_section: str | None = None
-        section_type = "cluster"  # "cluster", "word_boundary", "broad", "context"
+        section_type = "cluster"
 
         for line in text.splitlines():
             stripped = line.strip()
             lower = stripped.lower()
 
-            # Detect section headers
             if stripped.startswith("#"):
                 header = stripped.lstrip("#").strip().rstrip(":")
                 header_lower = header.lower()
@@ -164,6 +105,9 @@ class KeywordDB:
                 elif "context keyword" in header_lower:
                     section_type = "context"
                     current_section = header
+                elif "categor" in header_lower:
+                    section_type = "categories"
+                    current_section = header
                 elif any(
                     skip in header_lower
                     for skip in ["install", "usage", "license", "how it works"]
@@ -174,34 +118,12 @@ class KeywordDB:
                     current_section = header
                 continue
 
-            # Detect labeled lines as section starts
-            if re.match(r"^[-*]\s+.*:$", stripped):
-                label = stripped.lstrip("-*").strip().rstrip(":")
-                label_lower = label.lower()
-                if any(
-                    t in label_lower
-                    for t in [
-                        "research area",
-                        "research interest",
-                        "topic",
-                        "keyword",
-                        "direction",
-                        "additional",
-                    ]
-                ):
-                    section_type = "cluster"
-                    current_section = label
-                continue
-
-            # Parse bullet items
             if current_section and re.match(r"^\s*[-*]", line):
                 kw = stripped.lstrip("-*").strip()
-                # Clean markdown formatting
                 kw = re.sub(r"\*\*([^*]+)\*\*", r"\1", kw)
                 kw = re.sub(r"\*([^*]+)\*", r"\1", kw)
                 kw = kw.split("—")[0].split("–")[0].strip()
 
-                # Skip comments, code, sentences
                 if not kw or len(kw) > 80 or len(kw) < 2:
                     continue
                 if kw.startswith("#") or kw.startswith("//"):
@@ -215,15 +137,18 @@ class KeywordDB:
                     broad.add(kw)
                 elif section_type == "context":
                     context.append(kw)
+                elif section_type == "categories":
+                    categories.append(kw)
                 else:
                     clusters.setdefault(current_section, []).append(kw)
 
+        # Store categories in data for later retrieval
+        if categories:
+            self.data["categories"] = categories
+
         return clusters, word_boundary, broad, context
 
-    # ── Runtime access ──
-
     def to_filter_config(self) -> FilterConfig:
-        """Convert current keyword DB into a FilterConfig for the filter engine."""
         topic_clusters = {}
         for cluster_name, cluster_data in self.data.get("clusters", {}).items():
             topic_clusters[cluster_name] = list(
@@ -231,6 +156,7 @@ class KeywordDB:
             )
 
         return FilterConfig(
+            categories=self.data.get("categories", []),
             topic_clusters=topic_clusters,
             word_boundary_keywords=set(
                 self.data.get("word_boundary_keywords", [])
@@ -240,16 +166,13 @@ class KeywordDB:
         )
 
     def record_hit(self, cluster_name: str, keyword: str):
-        """Increment hit count for a keyword."""
         cluster = self.data.get("clusters", {}).get(cluster_name, {})
         kw_data = cluster.get("keywords", {}).get(keyword)
         if kw_data:
             kw_data["hits"] = kw_data.get("hits", 0) + 1
 
-    # ── LLM feedback ──
-
     def learn_keywords(self, new_keywords: list[dict]) -> int:
-        """Ingest new keywords discovered by LLM during refinement.
+        """Ingest keywords discovered by LLM refinement.
 
         Each entry: {"keyword": "...", "cluster": "...", "reason": "..."}
         Returns number of new keywords added.
@@ -280,15 +203,11 @@ class KeywordDB:
 
         return added
 
-    # ── Persistence ──
-
     def save(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(
             json.dumps(self.data, ensure_ascii=False, indent=2)
         )
-
-    # ── Stats ──
 
     def stats(self) -> dict:
         total = 0

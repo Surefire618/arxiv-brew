@@ -1,64 +1,108 @@
-# Agent Integration
+# Agent Integration Guide
 
-How to use arxiv-brew with an LLM agent (any LLM-based coding agent).
+How LLM agents (Claude Code, Codex, OpenClaw, etc.) can use arxiv-brew.
 
-## Overview
+## What this tool does
 
-The pipeline does all heavy lifting locally. The LLM only touches:
-- ~5-15 candidate abstracts for refinement (stage 2)
-- ~3-8 full papers for summary writing
+Filters today's new arXiv papers by keyword, downloads full text, and produces a structured digest. The agent's role: run the pipeline, optionally refine results with an LLM, and deliver the digest.
 
-## Workflow
+## Commands
 
-```
-1. Agent runs: python -m arxiv_brew --output result.json --refine-prompt refine.txt
-2. Agent reads refine.txt → sends to LLM → gets response
-3. Agent feeds response back via parse_refinement_response() + apply_refinement()
-4. Agent reads each paper's content.md → writes research-notebook-style summaries
-5. Agent delivers digest (email, chat, database, etc.)
-```
+All commands work via `python -m arxiv_brew` or the optional `arxiv-brew` bash wrapper.
 
-## Stage 2: LLM Refinement
-
-### Generate prompt
+### First-time setup
 
 ```bash
-python -m arxiv_brew --output result.json --refine-prompt refine.txt
+python -m arxiv_brew --research-profile config/my_research.md --init-keywords --digest-only
 ```
 
-`refine.txt` contains a structured prompt with all stage-1 candidates.
+### Daily run
 
-### Parse LLM response
+```bash
+# Digest to stdout
+python -m arxiv_brew --digest-only
+
+# Full output with JSON
+python -m arxiv_brew --output result.json --paper-dir papers --digest-dir digests
+```
+
+### With LLM refinement (stage 2)
+
+```bash
+# Step 1: pipeline generates a refinement prompt
+python -m arxiv_brew --output result.json --refine-prompt refine.txt
+
+# Step 2: agent sends refine.txt content to LLM, gets JSON response
+
+# Step 3: agent calls Python API to apply decisions
+```
+
+### Archive cleanup
+
+```bash
+python -m arxiv_brew.db cleanup --retention-days 14
+python -m arxiv_brew.db status
+```
+
+## Python API for stage 2
 
 ```python
 from arxiv_brew.filter import parse_refinement_response, apply_refinement
 from arxiv_brew.keywords import KeywordDB
 
+# Parse LLM's JSON response
 decisions, new_keywords = parse_refinement_response(llm_response_text)
-# decisions = [{"index": 1, "keep": True, "reason": "..."}, ...]
-# new_keywords = [{"keyword": "phonon polariton", "cluster": "Transport Methods"}, ...]
 
+# Apply: filters papers + persists new keywords for future runs
 keyword_db = KeywordDB("config/keywords.json")
 final_papers = apply_refinement(candidates, decisions, new_keywords, keyword_db)
-# new_keywords are persisted — next run matches them without LLM
 ```
 
-## Keyword Learning
+### What `parse_refinement_response` expects
 
-When the LLM suggests new keywords via `learn_keywords()`, they are:
-- Added to `config/keywords.json` with `source: "llm"`
-- Available for stage-1 matching on the next run
-- Tracked with hit counts
+The LLM response should contain two JSON blocks:
 
-Over time, the keyword database grows and LLM refinement becomes less necessary.
+```json
+[{"index": 1, "keep": true, "reason": "relevant"}, ...]
+```
 
-## Function Reference
+```json
+{"new_keywords": [{"keyword": "phonon polariton", "cluster": "Transport", "reason": "..."}]}
+```
 
-| Function | What it does | Calls LLM? |
-|---|---|---|
-| `filter.build_refinement_prompt(papers)` | Formats candidates into an LLM prompt | No |
-| `filter.parse_refinement_response(text)` | Extracts decisions + keywords from LLM output | No |
-| `filter.apply_refinement(...)` | Applies decisions, persists new keywords | No |
-| `keywords.KeywordDB.learn_keywords(kws)` | Writes new keywords to DB | No |
+### What `learn_keywords` does
 
-No function in this package calls an LLM.
+New keywords are written to `config/keywords.json` with `source: "llm"`. On the next run, they participate in stage 1 keyword matching — reducing the need for LLM refinement over time.
+
+## Output formats
+
+### `--output result.json`
+
+```json
+{
+  "date": "2026-04-01",
+  "total_scanned": 142,
+  "total_matched": 5,
+  "keyword_db_stats": {"total_keywords": 80, "by_source": {"user": 65, "llm": 15}},
+  "summaries": [
+    {
+      "id": "2604.00123",
+      "title": "...",
+      "authors_full": "A, B, C*",
+      "corresponding_author": "C",
+      "affiliations": ["University of ..."],
+      "matched_clusters": ["ML Potentials"],
+      "abstract": "..."
+    }
+  ],
+  "digest_text": "📰 **arXiv Digest — 2026-04-01**\n..."
+}
+```
+
+### `--digest-only`
+
+Prints the markdown digest to stdout (no JSON wrapper).
+
+### `--refine-prompt FILE`
+
+Writes a prompt with all stage-1 candidates for LLM evaluation.

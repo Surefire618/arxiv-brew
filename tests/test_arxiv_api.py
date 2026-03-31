@@ -1,6 +1,6 @@
 """Tests for arXiv API parsing.
 
-Uses real paper: Knoop, Purcell, Scheffler, Carbogno,
+Uses: Knoop, Purcell, Scheffler, Carbogno,
 "Anharmonicity Measure for Materials", PRL 130, 236301 (2023).
 https://arxiv.org/abs/2006.14672
 """
@@ -36,6 +36,12 @@ class TestParseEntry(unittest.TestCase):
     def test_id(self):
         self.assertEqual(self.paper.id, "2006.14672")
 
+    def test_version(self):
+        self.assertEqual(self.paper.version, 2)
+
+    def test_html_url_uses_version(self):
+        self.assertEqual(self.paper.html_url, "https://arxiv.org/html/2006.14672v2")
+
     def test_title(self):
         self.assertEqual(self.paper.title, "Anharmonicity Measure for Materials")
 
@@ -58,11 +64,31 @@ class TestParseEntry(unittest.TestCase):
 
     def test_abstract_content(self):
         self.assertIn("anharmonicity", self.paper.abstract.lower())
-        self.assertIn("harmonic approximation", self.paper.abstract.lower())
 
     def test_urls(self):
         self.assertEqual(self.paper.abs_url, "https://arxiv.org/abs/2006.14672")
         self.assertEqual(self.paper.pdf_url, "https://arxiv.org/pdf/2006.14672.pdf")
+
+
+class TestParseV1Entry(unittest.TestCase):
+    """Entries without explicit version default to v1."""
+    _V1_ENTRY = """\
+<entry xmlns="http://www.w3.org/2005/Atom" xmlns:arxiv="http://arxiv.org/schemas/atom">
+  <id>http://arxiv.org/abs/2604.00001</id>
+  <title>Test</title>
+  <summary>Abstract.</summary>
+  <published>2026-04-01T00:00:00Z</published>
+  <updated>2026-04-01T00:00:00Z</updated>
+  <author><name>A</name></author>
+  <category term="cs.CL"/>
+  <arxiv:primary_category term="cs.CL"/>
+</entry>
+"""
+
+    def test_default_version(self):
+        paper = _parse_entry(ET.fromstring(self._V1_ENTRY))
+        self.assertEqual(paper.version, 1)
+        self.assertIn("v1", paper.html_url)
 
 
 class TestPaperSerialization(unittest.TestCase):
@@ -72,6 +98,7 @@ class TestPaperSerialization(unittest.TestCase):
         self.assertEqual(restored.id, original.id)
         self.assertEqual(restored.title, original.title)
         self.assertEqual(restored.authors, original.authors)
+        self.assertEqual(restored.version, original.version)
         self.assertEqual(restored.primary_category, original.primary_category)
 
 

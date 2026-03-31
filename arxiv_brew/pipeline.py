@@ -1,11 +1,4 @@
-"""
-Full pipeline: pull → keyword filter → (optional LLM refine) → download → summarize.
-
-Usage:
-  arxiv-pipeline                                                    # defaults
-  arxiv-pipeline --research-profile config/my_research.md           # with profile
-  arxiv-pipeline --refine-prompt /tmp/refine.txt                    # stage 2 prep
-"""
+"""Full pipeline: pull → filter → download → summarize."""
 
 from __future__ import annotations
 
@@ -16,6 +9,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from . import __version__
 from .arxiv_api import fetch_new_ids_multi, fetch_metadata
 from .config import FilterConfig
 from .filter import keyword_filter, build_refinement_prompt
@@ -23,19 +17,22 @@ from .keywords import KeywordDB
 from .download import archive_paper
 from .summarize import build_summary, format_digest
 
+_P = "[brew]"
+
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="arxiv-pipeline",
+        prog="arxiv-brew",
         description="Full arXiv digest pipeline.",
     )
-    parser.add_argument("--version", action="version", version="arxiv-brew 0.1.0")
+    parser.add_argument("--version", action="version", version=f"arxiv-brew {__version__}")
     parser.add_argument("--categories", nargs="+", default=None)
     parser.add_argument("--keywords", metavar="FILE")
     parser.add_argument("--research-profile", metavar="FILE",
-                        help="User-created research profile (config/my_research.md)")
+                        help="Research profile (config/my_research.md)")
     parser.add_argument("--keyword-db", default="config/keywords.json")
-    parser.add_argument("--bootstrap", action="store_true")
+    parser.add_argument("--init-keywords", action="store_true",
+                        help="Force re-initialize keyword DB from profile")
     parser.add_argument("--paper-dir", default="papers")
     parser.add_argument("--digest-dir", default="digests")
     parser.add_argument("--output", "-o", default=None)
@@ -46,33 +43,32 @@ def main(argv: list[str] | None = None) -> int:
 
     date = datetime.now().strftime("%Y-%m-%d")
 
-    # ── Keyword DB ──
     kw_db = KeywordDB(args.keyword_db)
-    if args.bootstrap or not kw_db.data.get("clusters"):
+    if args.init_keywords or not kw_db.data.get("clusters"):
         if not args.research_profile:
-            print("[pipeline] Error: no keyword database found.", file=sys.stderr)
-            print("[pipeline] Create config/my_research.md from the template, then run:", file=sys.stderr)
-            print("[pipeline]   ./arxiv-brew run --research-profile config/my_research.md --bootstrap", file=sys.stderr)
+            print(f"{_P} No keyword database found.", file=sys.stderr)
+            print(f"{_P} Run: arxiv-brew init", file=sys.stderr)
             return 1
-        print(f"[pipeline] Bootstrapping keyword DB from {args.research_profile}...", file=sys.stderr)
-        kw_db.bootstrap(research_profile=args.research_profile, force=args.bootstrap)
+        print(f"{_P} Initializing keywords from {args.research_profile}...", file=sys.stderr)
+        kw_db.init_from_profile(args.research_profile, force=args.init_keywords)
         stats = kw_db.stats()
         if stats["total_keywords"] == 0:
-            print("[pipeline] Warning: no keywords extracted from profile.", file=sys.stderr)
-            print("[pipeline] Check your config/my_research.md format.", file=sys.stderr)
+            print(f"{_P} No keywords extracted. Check your research profile.", file=sys.stderr)
             return 1
-        print(f"[pipeline] Keywords: {stats['total_keywords']} ({stats['by_source']})", file=sys.stderr)
+        print(f"{_P} Keywords: {stats['total_keywords']} ({stats['by_source']})", file=sys.stderr)
 
     config = kw_db.to_filter_config()
     if args.keywords:
         config = config.merge(FilterConfig.from_file(args.keywords))
     if args.categories:
         config.categories = args.categories
+    if not config.categories:
+        print(f"{_P} No categories configured. Add a ## Categories section to your research profile.", file=sys.stderr)
+        return 1
 
-    # ── Pull ──
-    print(f"[pipeline] {date} — scanning {len(config.categories)} categories", file=sys.stderr)
+    print(f"{_P} {date} — scanning {len(config.categories)} categories", file=sys.stderr)
     all_ids = fetch_new_ids_multi(config.categories)
-    print(f"[pipeline] {len(all_ids)} new papers", file=sys.stderr)
+    print(f"{_P} {len(all_ids)} new papers", file=sys.stderr)
 
     if not all_ids:
         if args.digest_only:
@@ -80,27 +76,24 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     papers = fetch_metadata(all_ids)
-    print(f"[pipeline] Metadata for {len(papers)}", file=sys.stderr)
+    print(f"{_P} Metadata for {len(papers)}", file=sys.stderr)
 
-    # ── Stage 1: Keyword filter ──
     filtered = keyword_filter(papers, config, kw_db)
     kw_db.save()
-    print(f"[pipeline] Stage 1: {len(filtered)} matched", file=sys.stderr)
+    print(f"{_P} {len(filtered)} matched", file=sys.stderr)
     for p in filtered:
         print(f"  ✓ [{', '.join(p.matched_clusters)}] {p.id}: {p.title[:65]}", file=sys.stderr)
 
-    # ── Stage 2 prep ──
     if args.refine_prompt and filtered:
         prompt = build_refinement_prompt(filtered)
         Path(args.refine_prompt).write_text(prompt)
-        print(f"[pipeline] Refinement prompt → {args.refine_prompt}", file=sys.stderr)
+        print(f"{_P} Refinement prompt → {args.refine_prompt}", file=sys.stderr)
 
     if not filtered:
         if args.digest_only:
             print("No relevant papers today.")
         return 0
 
-    # ── Download ──
     base_dir = Path(args.paper_dir)
     for i, paper in enumerate(filtered):
         archive_paper(paper, base_dir)
@@ -108,7 +101,6 @@ def main(argv: list[str] | None = None) -> int:
         if i < len(filtered) - 1 and paper.download_status != "cached":
             time.sleep(1.5)
 
-    # ── Summarize ──
     summaries = []
     for paper in filtered:
         content = None
