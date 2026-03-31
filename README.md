@@ -6,18 +6,19 @@ Keyword-based arXiv paper filtering and digest generation. Designed to be called
 
 ```mermaid
 flowchart LR
-    Pull[Pull] --> Filter[Filter]
-    Filter --> Download[Download]
-    Download --> Digest[Digest]
-    Filter -.-> Refine[LLM Refine]
-    Refine -.-> Filter
+    A["Scrape new IDs\nfrom arxiv.org"] --> B["Fetch metadata\nvia Atom API"]
+    B --> C["Keyword filter\nagainst topic clusters"]
+    C --> D["Download full text\n(HTML / PDF)"]
+    D --> E["Generate digest\ngrouped by cluster"]
+    C -.->|optional| F["LLM refine\n+ learn keywords"]
+    F -.-> C
 ```
 
-- **Pull** — fetch today's new arXiv submissions and metadata
-- **Filter** — keyword matching against your topic clusters
-- **Download** — full text retrieval (HTML preferred, PDF fallback)
-- **Digest** — format results grouped by topic cluster
-- **LLM Refine** *(optional)* — agent judges relevance, suggests new keywords
+- **Pull** — scrape today's new paper IDs from configured arXiv categories, fetch metadata via Atom API
+- **Filter** — match titles and abstracts against your keyword clusters (word-boundary and context-aware)
+- **Download** — retrieve full text, HTML preferred, PDF fallback
+- **Digest** — extract affiliations, format results grouped by topic cluster
+- **LLM Refine** *(optional)* — an agent judges candidate relevance and suggests new keywords, which are persisted for future runs
 
 ## Install
 
