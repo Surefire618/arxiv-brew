@@ -19,10 +19,10 @@ Python 3.10+, stdlib only. No external dependencies.
 
 ```bash
 # Print today's digest to stdout
-python -m arxiv_brew --digest-only
+./arxiv-brew run --digest-only
 
 # Full pipeline with file output
-python -m arxiv_brew --output result.json --paper-dir papers --digest-dir digests
+./arxiv-brew run --output result.json --paper-dir papers --digest-dir digests
 ```
 
 ### Personalize
@@ -30,15 +30,15 @@ python -m arxiv_brew --output result.json --paper-dir papers --digest-dir digest
 ```bash
 cp config/my_research.md.template config/my_research.md
 # Edit with your research interests, then:
-python -m arxiv_brew --research-profile config/my_research.md --bootstrap --digest-only
+./arxiv-brew run --research-profile config/my_research.md --bootstrap --digest-only
 ```
 
 ### Step by step
 
 ```bash
-python -m arxiv_brew.pull -o papers.json
-python -m arxiv_brew.download papers.json -o downloaded.json
-python -m arxiv_brew.summarize downloaded.json --digest-dir digests/
+./arxiv-brew pull -o papers.json
+./arxiv-brew download papers.json -o downloaded.json
+./arxiv-brew summarize downloaded.json --digest-dir digests/
 ```
 
 ### Agent integration
@@ -50,7 +50,7 @@ The pipeline produces structured JSON output and optional LLM refinement prompts
 3. Feed keywords back — they are persisted for future runs, reducing LLM dependency over time
 
 ```bash
-python -m arxiv_brew --output result.json --refine-prompt refine.txt
+./arxiv-brew run --output result.json --refine-prompt refine.txt
 ```
 
 See [docs/agent_integration.md](docs/agent_integration.md) for the full workflow.
