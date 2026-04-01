@@ -36,7 +36,7 @@ def run_init(config_dir: str = "config") -> int:
 
     print(f"\n{_P} Next steps:", file=sys.stderr)
     print(f"  1. Edit {profile}", file=sys.stderr)
-    print(f"  2. Run: arxiv-brew --research-profile {profile} --init-keywords --digest-only", file=sys.stderr)
+    print(f"  2. Run: arxiv-brew --research-profile {profile} --update-keywords --digest-only", file=sys.stderr)
 
     return 0
 
@@ -45,11 +45,11 @@ _DEFAULT_TEMPLATE = """\
 # My Research Profile
 #
 # This file defines your arxiv-brew keywords and categories.
-# --init-keywords parses this file with pure rules (no LLM) to build
-# config/keywords.json. Re-run with --init-keywords after editing.
+# --update-keywords parses this file with pure rules (no LLM) to build
+# config/keywords.json. Re-run with --update-keywords after editing.
 #
 # Usage:
-#   arxiv-brew --research-profile config/my_research.md --init-keywords --digest-only
+#   arxiv-brew --research-profile config/my_research.md --update-keywords --digest-only
 #
 # ## File format
 #

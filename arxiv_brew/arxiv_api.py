@@ -15,7 +15,7 @@ from . import USER_AGENT
 
 _ATOM_NS = "http://www.w3.org/2005/Atom"
 _ARXIV_NS = "http://arxiv.org/schemas/atom"
-_API_BASE = "http://export.arxiv.org/api/query"
+_API_BASE = "https://export.arxiv.org/api/query"
 
 
 @dataclass
@@ -68,6 +68,9 @@ class Paper:
 
 
 def _request(url: str, timeout: int = 30) -> bytes:
+    # Ensure HTTPS to avoid redirect-induced timeouts
+    if url.startswith("http://"):
+        url = "https://" + url[7:]
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     for attempt in range(3):
         try:
@@ -78,7 +81,7 @@ def _request(url: str, timeout: int = 30) -> bytes:
                 time.sleep(5 * (attempt + 1))
                 continue
             raise
-        except urllib.error.URLError:
+        except (urllib.error.URLError, TimeoutError, OSError):
             if attempt < 2:
                 time.sleep(3)
                 continue

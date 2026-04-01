@@ -53,7 +53,7 @@ def main(argv: list[str] | None = None) -> int:
                         help="Research profile (default: <config-dir>/my_research.md)")
     parser.add_argument("--keyword-db", default=None,
                         help="Keyword database (default: <config-dir>/keywords.json)")
-    parser.add_argument("--init-keywords", action="store_true",
+    parser.add_argument("--update-keywords", action="store_true",
                         help="Rebuild keyword DB from profile (rule-based, no LLM)")
     parser.add_argument("--paper-dir", default="papers")
     parser.add_argument("--digest-dir", default="digests")
@@ -76,13 +76,14 @@ def main(argv: list[str] | None = None) -> int:
         args.keyword_db = str(cfg_dir / "keywords.json")
 
     kw_db = KeywordDB(args.keyword_db)
-    if args.init_keywords or not kw_db.data.get("clusters"):
+    if args.update_keywords or not kw_db.data.get("clusters"):
         if not args.research_profile:
             _log(f"{_P} No keyword database found.")
             _log(f"{_P} Run: arxiv-brew init")
             return EC.CONFIG_ERROR
-        _log(f"{_P} Initializing keywords from {args.research_profile}...")
-        kw_db.init_from_profile(args.research_profile, force=args.init_keywords)
+        _log(f"{_P} Updating keywords from {args.research_profile}...")
+        result = kw_db.update_from_profile(args.research_profile)
+        _log(f"{_P} Keywords: +{result['added']} added, -{result['removed']} removed")
         stats = kw_db.stats()
         if stats["total_keywords"] == 0:
             _log(f"{_P} No keywords extracted. Check your research profile.")

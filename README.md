@@ -36,32 +36,58 @@ pip install -e .
 
 Python 3.10+, stdlib only. No external dependencies.
 
-## Quick start
+## Setup
 
 ```bash
-# 1. Set up your research profile
+# 1. Create your research profile
 arxiv-brew init
-# Edit config/my_research.md with your topics and keywords
 
-# 2. Initialize keywords and run
-arxiv-brew --research-profile config/my_research.md --init-keywords --digest-only
+# 2. Edit config/my_research.md with your arXiv categories and keywords
+
+# 3. Build the keyword database
+arxiv-brew --research-profile config/my_research.md --update-keywords
 ```
 
 ## Usage
 
 ```bash
-# Daily digest to stdout
+# Daily digest
 arxiv-brew --digest-only
 
 # Full pipeline with file output
 arxiv-brew --output result.json --paper-dir papers --digest-dir digests
+```
 
-# Step-by-step
+### Managing keywords
+
+```bash
+# Show current keywords
+arxiv-keywords list
+
+# Add a keyword to a cluster
+arxiv-keywords add "ML Potentials" "graph neural network"
+
+# Remove a keyword
+arxiv-keywords remove "ML Potentials" "graph neural network"
+
+# After editing config/my_research.md, sync changes (preserves LLM-learned keywords)
+arxiv-keywords update
+
+# Full reset from profile (discards LLM-learned keywords)
+arxiv-keywords reset
+```
+
+### Step-by-step pipeline
+
+```bash
 arxiv-pull -o papers.json
 arxiv-download papers.json -o downloaded.json
 arxiv-summarize downloaded.json --digest-dir digests/
+```
 
-# Archive management
+### Archive management
+
+```bash
 arxiv-db status
 arxiv-db cleanup --retention-days 14
 ```
@@ -77,24 +103,25 @@ The profile defines:
 - **Broad keywords** — generic terms that require a context keyword to co-occur
 - **Context keywords** — terms that validate broad keyword matches
 
-Run `arxiv-brew --init-keywords --research-profile config/my_research.md` after editing your profile to rebuild the keyword database.
-
 ## Agent integration
 
 See [docs/agent_integration.md](docs/agent_integration.md) for how to use arxiv-brew with LLM agents (Claude Code, Codex, OpenClaw, etc.).
 
 ## CLI reference
 
-Installed via `pip install .`:
-
 | Command | Description |
 |---|---|
 | `arxiv-brew` | Full pipeline |
-| `arxiv-brew init` | Set up config/my_research.md |
-| `arxiv-pull` | Pull and filter today's papers |
+| `arxiv-brew init` | Create research profile |
+| `arxiv-keywords list` | Show all keywords |
+| `arxiv-keywords add CLUSTER KW` | Add a keyword |
+| `arxiv-keywords remove CLUSTER KW` | Remove a keyword |
+| `arxiv-keywords update` | Sync from research profile |
+| `arxiv-keywords reset` | Rebuild from profile |
+| `arxiv-pull` | Pull and filter papers |
 | `arxiv-download` | Download full text |
 | `arxiv-summarize` | Generate digest |
-| `arxiv-db` | Archive management (status, cleanup) |
+| `arxiv-db` | Archive management |
 
 All commands support `--help`.
 
