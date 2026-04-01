@@ -26,10 +26,10 @@ Prints the digest to stdout, nothing to stderr. Exit code tells you what happene
 pip install .
 arxiv-brew init
 # Edit config/my_research.md with your topics and keywords
-arxiv-brew --research-profile config/my_research.md --init-keywords --digest-only
+arxiv-brew --research-profile config/my_research.md --update-keywords --digest-only
 ```
 
-`--init-keywords` is **rule-based** (no LLM). It parses your markdown profile into `config/keywords.json`. Re-run after editing your profile.
+`--update-keywords` is **rule-based** (no LLM). It parses your markdown profile into `config/keywords.json`. Re-run after editing your profile.
 
 ## Daily run (stage 1 only)
 

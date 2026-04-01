@@ -27,52 +27,109 @@ class KeywordDB:
         if self.path.exists():
             self.data = json.loads(self.path.read_text())
 
-    def init_from_profile(
-        self,
-        research_profile: str | Path,
-        force: bool = False,
-    ):
-        """Build keyword DB from a research profile.
+    def update_from_profile(self, research_profile: str | Path) -> dict:
+        """Merge research profile into keyword DB, preserving LLM-learned keywords.
 
-        Args:
-            research_profile: Path to config/my_research.md.
-            force: Rebuild even if DB already has data.
+        - New user keywords are added
+        - User keywords removed from profile are removed from DB
+        - LLM-sourced keywords are never touched
+
+        Returns {"added": int, "removed": int}.
         """
-        if self.data.get("clusters") and not force:
-            return
-
         path = Path(research_profile)
         if not path.exists():
-            return
+            return {"added": 0, "removed": 0}
 
         clusters, word_boundary, broad, context = self._parse_research_profile(path)
+        today = datetime.now().strftime("%Y-%m-%d")
+        added = 0
+        removed = 0
 
+        profile_clusters = set(clusters.keys())
         for cluster_name, keywords in clusters.items():
             cluster = self.data.setdefault("clusters", {}).setdefault(
                 cluster_name, {"keywords": {}}
             )
+            profile_kws = set(keywords)
+
             for kw in keywords:
                 if kw not in cluster["keywords"]:
                     cluster["keywords"][kw] = {
                         "source": "user",
                         "hits": 0,
-                        "added": datetime.now().strftime("%Y-%m-%d"),
+                        "added": today,
                     }
+                    added += 1
 
-        if word_boundary:
-            self.data["word_boundary_keywords"] = sorted(
-                set(self.data.get("word_boundary_keywords", [])) | word_boundary
-            )
-        if broad:
-            self.data["broad_keywords"] = sorted(
-                set(self.data.get("broad_keywords", [])) | broad
-            )
+            to_remove = [
+                kw for kw, meta in cluster["keywords"].items()
+                if meta.get("source") == "user" and kw not in profile_kws
+            ]
+            for kw in to_remove:
+                del cluster["keywords"][kw]
+                removed += 1
+
+        empty = [
+            name for name, cdata in self.data.get("clusters", {}).items()
+            if not cdata.get("keywords") and name not in profile_clusters
+        ]
+        for name in empty:
+            del self.data["clusters"][name]
+
+        self.data["word_boundary_keywords"] = sorted(word_boundary) if word_boundary else self.data.get("word_boundary_keywords", [])
+        self.data["broad_keywords"] = sorted(broad) if broad else self.data.get("broad_keywords", [])
         if context:
-            existing = self.data.get("context_keywords", [])
-            self.data["context_keywords"] = list(dict.fromkeys(existing + context))
+            self.data["context_keywords"] = list(dict.fromkeys(context))
 
+        self.data["last_updated"] = today
+        self.save()
+        return {"added": added, "removed": removed}
+
+    def reset_from_profile(self, research_profile: str | Path) -> dict:
+        """Completely rebuild keyword DB from profile, discarding all existing data."""
+        self.data = {
+            "clusters": {},
+            "context_keywords": [],
+            "word_boundary_keywords": [],
+            "broad_keywords": [],
+            "last_updated": "",
+        }
+        return self.update_from_profile(research_profile)
+
+    def add_keyword(self, cluster: str, keyword: str, source: str = "user") -> bool:
+        """Add a single keyword. Returns True if newly added."""
+        c = self.data.setdefault("clusters", {}).setdefault(cluster, {"keywords": {}})
+        if keyword in c["keywords"]:
+            return False
+        c["keywords"][keyword] = {
+            "source": source,
+            "hits": 0,
+            "added": datetime.now().strftime("%Y-%m-%d"),
+        }
         self.data["last_updated"] = datetime.now().strftime("%Y-%m-%d")
         self.save()
+        return True
+
+    def remove_keyword(self, cluster: str, keyword: str) -> bool:
+        """Remove a single keyword. Returns True if found and removed."""
+        c = self.data.get("clusters", {}).get(cluster, {})
+        kws = c.get("keywords", {})
+        if keyword in kws:
+            del kws[keyword]
+            self.data["last_updated"] = datetime.now().strftime("%Y-%m-%d")
+            self.save()
+            return True
+        return False
+
+    def list_keywords(self) -> dict[str, list[dict]]:
+        """Return all keywords grouped by cluster with metadata."""
+        result = {}
+        for cname, cdata in self.data.get("clusters", {}).items():
+            result[cname] = [
+                {"keyword": kw, "source": meta.get("source", "?"), "hits": meta.get("hits", 0)}
+                for kw, meta in cdata.get("keywords", {}).items()
+            ]
+        return result
 
     def _parse_research_profile(
         self, path: Path
