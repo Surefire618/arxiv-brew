@@ -9,48 +9,66 @@ from datetime import datetime
 from pathlib import Path
 
 from .arxiv_api import fetch_new_ids_multi, fetch_metadata
-from .config import FilterConfig
+from .config import FilterConfig, resolve_config_dir
 from .db import SeenIndex
+from . import exitcodes as EC
 from .filter import keyword_filter, build_refinement_prompt
 from .keywords import KeywordDB
 
 _P = "[brew]"
+_quiet = False
+
+
+def _log(*args, **kwargs):
+    if not _quiet:
+        print(*args, file=sys.stderr, **kwargs)
 
 
 def main(argv: list[str] | None = None) -> int:
+    global _quiet
     parser = argparse.ArgumentParser(
         prog="arxiv-pull",
         description="Pull and filter today's new arXiv papers.",
     )
+    parser.add_argument("--config-dir", metavar="DIR", default=None,
+                        help="Config directory (default: $ARXIV_BREW_CONFIG_DIR or ./config)")
     parser.add_argument("--categories", nargs="+", default=None)
     parser.add_argument("--keywords", metavar="FILE", help="Keyword config JSON")
     parser.add_argument("--research-profile", metavar="FILE",
-                        help="Research profile (e.g. config/my_research.md)")
-    parser.add_argument("--keyword-db", metavar="FILE", default="config/keywords.json")
+                        help="Research profile (default: <config-dir>/my_research.md)")
+    parser.add_argument("--keyword-db", metavar="FILE", default=None,
+                        help="Keyword database (default: <config-dir>/keywords.json)")
     parser.add_argument("--init-keywords", action="store_true",
-                        help="Force re-initialize keyword DB from profile")
+                        help="Rebuild keyword DB from profile (rule-based, no LLM)")
     parser.add_argument("--output", "-o", metavar="FILE")
     parser.add_argument("--all", action="store_true", help="Output all papers")
-    parser.add_argument("--no-dedup", action="store_true",
-                        help="Skip cross-day deduplication")
+    parser.add_argument("--no-dedup", "--force", action="store_true",
+                        help="Reprocess all papers, ignoring seen index")
+    parser.add_argument("--quiet", "-q", action="store_true",
+                        help="Suppress all stderr logging")
     parser.add_argument("--refinement-prompt", metavar="FILE",
                         help="Write LLM refinement prompt to file")
     args = parser.parse_args(argv)
+
+    _quiet = args.quiet
+    cfg_dir = resolve_config_dir(args.config_dir)
+    if not args.keyword_db:
+        args.keyword_db = str(cfg_dir / "keywords.json")
 
     kw_db = KeywordDB(args.keyword_db)
 
     if args.init_keywords or not kw_db.data.get("clusters"):
         if not args.research_profile:
-            print(f"{_P} No keyword database found.", file=sys.stderr)
-            print(f"{_P} Run: arxiv-brew init", file=sys.stderr)
-            return 1
-        print(f"{_P} Initializing keywords from {args.research_profile}...", file=sys.stderr)
+            _log(f"{_P} No keyword database found.")
+            _log(f"{_P} Run: arxiv-brew init")
+            return EC.CONFIG_ERROR
+        _log(f"{_P} Initializing keywords from {args.research_profile}...")
         kw_db.init_from_profile(args.research_profile, force=args.init_keywords)
         stats = kw_db.stats()
         if stats["total_keywords"] == 0:
-            print(f"{_P} No keywords extracted. Check your research profile format.", file=sys.stderr)
-            return 1
-        print(f"{_P} Keywords: {stats['total_keywords']} ({stats['by_source']})", file=sys.stderr)
+            _log(f"{_P} No keywords extracted. Check your research profile format.")
+            return EC.CONFIG_ERROR
+        _log(f"{_P} Keywords: {stats['total_keywords']} ({stats['by_source']})")
 
     config = kw_db.to_filter_config()
 
@@ -59,29 +77,37 @@ def main(argv: list[str] | None = None) -> int:
     if args.categories:
         config.categories = args.categories
     if not config.categories:
-        print(f"{_P} No categories configured. Add a ## Categories section to your research profile.", file=sys.stderr)
-        return 1
+        _log(f"{_P} No categories configured. Add a ## Categories section to your research profile.")
+        return EC.CONFIG_ERROR
 
-    seen = SeenIndex()
+    seen = SeenIndex(cfg_dir / "seen.json")
 
-    print(f"{_P} Scanning {len(config.categories)} categories...", file=sys.stderr)
-    all_ids = fetch_new_ids_multi(config.categories)
-    print(f"{_P} {len(all_ids)} unique new papers", file=sys.stderr)
+    _log(f"{_P} Scanning {len(config.categories)} categories...")
+    try:
+        all_ids = fetch_new_ids_multi(config.categories)
+    except Exception as e:
+        _log(f"{_P} Network error fetching paper IDs: {e}")
+        return EC.NETWORK_ERROR
+    _log(f"{_P} {len(all_ids)} unique new papers")
 
     if not args.no_dedup:
         before = len(all_ids)
         all_ids = [pid for pid in all_ids if pid not in seen]
         skipped = before - len(all_ids)
         if skipped:
-            print(f"{_P} {skipped} already seen, {len(all_ids)} remaining", file=sys.stderr)
+            _log(f"{_P} {skipped} already seen, {len(all_ids)} remaining")
 
     if not all_ids:
         result = {"date": datetime.now().strftime("%Y-%m-%d"), "papers": []}
         _output(result, args.output)
-        return 0
+        return EC.NO_MATCHES
 
-    papers = fetch_metadata(all_ids)
-    print(f"{_P} Metadata for {len(papers)} papers", file=sys.stderr)
+    try:
+        papers = fetch_metadata(all_ids)
+    except Exception as e:
+        _log(f"{_P} Network error fetching metadata: {e}")
+        return EC.NETWORK_ERROR
+    _log(f"{_P} Metadata for {len(papers)} papers")
 
     if args.all:
         for p in papers:
@@ -95,15 +121,15 @@ def main(argv: list[str] | None = None) -> int:
     seen.prune()
     seen.save()
 
-    print(f"{_P} {len(filtered)} papers matched", file=sys.stderr)
+    _log(f"{_P} {len(filtered)} papers matched")
     for p in filtered:
         clusters = ", ".join(p.matched_clusters)
-        print(f"  ✓ [{clusters}] ({p.relevance_score}) {p.id}: {p.title[:60]}", file=sys.stderr)
+        _log(f"  ✓ [{clusters}] ({p.relevance_score}) {p.id}: {p.title[:60]}")
 
     if args.refinement_prompt and filtered:
         prompt = build_refinement_prompt(filtered)
         Path(args.refinement_prompt).write_text(prompt)
-        print(f"{_P} Refinement prompt → {args.refinement_prompt}", file=sys.stderr)
+        _log(f"{_P} Refinement prompt → {args.refinement_prompt}")
 
     result = {
         "date": datetime.now().strftime("%Y-%m-%d"),
@@ -114,7 +140,7 @@ def main(argv: list[str] | None = None) -> int:
         "papers": [p.to_dict() for p in filtered],
     }
     _output(result, args.output)
-    return 0
+    return EC.SUCCESS
 
 
 def _output(data: dict, path: str | None):
@@ -122,7 +148,7 @@ def _output(data: dict, path: str | None):
     if path:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         Path(path).write_text(text)
-        print(f"{_P} Saved to {path}", file=sys.stderr)
+        _log(f"{_P} Saved to {path}")
     else:
         print(text)
 

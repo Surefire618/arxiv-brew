@@ -3,9 +3,23 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+
+def resolve_config_dir(cli_arg: str | None = None) -> Path:
+    """Resolve the config directory.
+
+    Priority: --config-dir flag > $ARXIV_BREW_CONFIG_DIR > ./config
+    """
+    if cli_arg:
+        return Path(cli_arg)
+    env = os.environ.get("ARXIV_BREW_CONFIG_DIR")
+    if env:
+        return Path(env)
+    return Path("config")
 
 
 @dataclass
