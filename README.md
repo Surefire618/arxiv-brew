@@ -43,6 +43,33 @@ Python 3.10+, stdlib only. No external dependencies.
 arxiv-brew init
 
 # 2. Edit config/my_research.md with your arXiv categories and keywords
+```
+
+**Hint:** if you do not want to write `my_research.md` from scratch, you can ask your chatbot to generate it from the template.
+
+Prompt example:
+
+```text
+I am setting up arxiv-brew for daily literature monitoring.
+Please generate a complete `my_research.md` file in the exact format of `config/my_research.md.template`.
+
+Use your best understanding of my research field to fill in:
+- relevant arXiv categories
+- 2-5 topic clusters
+- word-boundary keywords
+- broad keywords
+- context keywords
+
+Requirements:
+- keep the same section structure as the template
+- output only the final markdown file
+- prefer precise technical keywords over vague topics
+- include both core methods and target materials / systems when relevant
+- do not invent personal details; infer only from my research area
+
+My research area:
+[describe your field here]
+```
 
 # 3. Build the keyword database
 arxiv-keywords update
