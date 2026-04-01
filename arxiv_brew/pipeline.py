@@ -62,6 +62,7 @@ def _brew(args) -> int:
 
     seen = SeenIndex(cfg_dir / "seen.json")
 
+    # Pull + metadata: always run (cheap)
     _log(f"{_P} {date} — scanning {len(config.categories)} categories")
     try:
         all_ids = fetch_new_ids_multi(config.categories)
@@ -69,13 +70,6 @@ def _brew(args) -> int:
         _log(f"{_P} Network error fetching paper IDs: {e}")
         return EC.NETWORK_ERROR
     _log(f"{_P} {len(all_ids)} new papers")
-
-    if not args.no_dedup:
-        before = len(all_ids)
-        all_ids = [pid for pid in all_ids if pid not in seen]
-        skipped = before - len(all_ids)
-        if skipped:
-            _log(f"{_P} {skipped} already seen, {len(all_ids)} remaining")
 
     if not all_ids:
         if not args.json:
@@ -89,12 +83,9 @@ def _brew(args) -> int:
         return EC.NETWORK_ERROR
     _log(f"{_P} Metadata for {len(papers)}")
 
+    # Keyword filter: always run (cheap, <1s)
     filtered = keyword_filter(papers, config, kw_db)
     kw_db.save()
-
-    seen.mark_seen([p.id for p in papers])
-    seen.prune()
-    seen.save()
 
     _log(f"{_P} {len(filtered)} matched")
     for p in filtered:
@@ -110,8 +101,26 @@ def _brew(args) -> int:
             print("No relevant papers today.")
         return EC.NO_MATCHES
 
+    # Download: skip papers already seen (expensive)
+    if not args.no_dedup:
+        before = len(filtered)
+        filtered = [p for p in filtered if p.id not in seen]
+        skipped = before - len(filtered)
+        if skipped:
+            _log(f"{_P} {skipped} already downloaded, {len(filtered)} new")
+
+    if not filtered:
+        if not args.json:
+            print("No new papers to download (all previously processed).")
+        return EC.NO_MATCHES
+
     base_dir = Path(args.paper_dir)
     download_papers(filtered, base_dir, quiet=_quiet)
+
+    # Mark only downloaded papers as seen
+    seen.mark_seen([p.id for p in filtered])
+    seen.prune()
+    seen.save()
 
     summaries = []
     for paper in filtered:
