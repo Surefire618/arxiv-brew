@@ -15,8 +15,17 @@ from .arxiv_api import Paper
 _P = "[brew]"
 
 
-def extract_affiliations(content: str) -> list[str]:
-    header = content[:4000]
+def extract_affiliations(content: str, html_meta: dict | None = None) -> list[str]:
+    # Prefer structured HTML metadata when available
+    if html_meta and html_meta.get("affiliations"):
+        return html_meta["affiliations"][:5]
+
+    # Fallback: regex on text before "Abstract" only
+    abstract_pos = content.find("Abstract")
+    if abstract_pos <= 0:
+        abstract_pos = min(4000, len(content))
+    header = content[:abstract_pos]
+
     affiliations: list[str] = []
 
     for m in re.finditer(r"organization=([^,;}\n]+)", header, re.I):
@@ -25,7 +34,6 @@ def extract_affiliations(content: str) -> list[str]:
             affiliations.append(aff)
 
     if not affiliations:
-        # Look for institution names with surrounding context
         inst_re = re.compile(
             r"(?:University|Institute|Department|Laboratory|School|College|"
             r"Université|Institut|Max Planck|Chinese Academy|"
@@ -74,8 +82,8 @@ def load_research_context(profile_path: Optional[str] = None) -> str:
     return f"# Research Context\n\n{text}\n\n---\n\n"
 
 
-def build_summary(paper: Paper, content: Optional[str] = None) -> dict:
-    affiliations = extract_affiliations(content) if content else []
+def build_summary(paper: Paper, content: Optional[str] = None, html_meta: dict | None = None) -> dict:
+    affiliations = paper.affiliations if paper.affiliations else extract_affiliations(content, html_meta) if content else []
     corresponding = extract_corresponding_author(content, paper.authors) if content else None
     if not corresponding and paper.authors:
         corresponding = paper.authors[-1]

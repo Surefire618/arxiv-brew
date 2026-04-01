@@ -36,8 +36,12 @@ def archive_paper(paper: Paper, base_dir: Path) -> Paper:
         paper.download_status = "cached"
         return paper
 
-    content = download_html(paper)
+    content, html_meta = download_html(paper)
     source = "html"
+
+    # Store HTML-extracted affiliations on the Paper object
+    if html_meta.get("affiliations"):
+        paper.affiliations = html_meta["affiliations"]
 
     if content is None:
         content = download_pdf_text(paper, str(paper_dir / "paper.pdf"))
@@ -51,6 +55,11 @@ def archive_paper(paper: Paper, base_dir: Path) -> Paper:
         content_path.write_text(header + content)
         paper.content_path = str(content_path)
         paper.download_status = f"ok:{source}"
+
+        # Save HTML metadata alongside content
+        if html_meta.get("authors") or html_meta.get("affiliations"):
+            meta_path = paper_dir / "html_meta.json"
+            meta_path.write_text(json.dumps(html_meta, ensure_ascii=False, indent=2))
     else:
         paper.content_path = None
         paper.download_status = "failed"

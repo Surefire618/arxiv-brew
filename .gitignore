@@ -27,3 +27,4 @@ config/seen.json
 # OS
 .DS_Store
 Thumbs.db
+stage1.json

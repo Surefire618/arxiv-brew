@@ -174,13 +174,54 @@ def fetch_metadata(arxiv_ids: list[str], chunk_size: int = 50) -> list[Paper]:
     return papers
 
 
-def download_html(paper: Paper) -> str | None:
-    """Download and extract text from arXiv HTML version."""
-    try:
-        html = _request(paper.html_url, timeout=60).decode("utf-8", errors="replace")
-    except Exception:
-        return None
+def extract_html_metadata(raw_html: str) -> dict:
+    """Extract structured author/affiliation data from arXiv HTML.
 
+    Parses ltx_personname and ltx_role_affiliation spans.
+    Returns {"authors": [{"name": ..., "affiliations": [...]}], "affiliations": [...]}.
+    """
+    authors = []
+    all_affiliations = []
+
+    for m in re.finditer(
+        r'ltx_creator ltx_role_author[^>]*>(.*?)(?=<span[^>]*ltx_creator ltx_role_author|</div)',
+        raw_html, re.S
+    ):
+        block = m.group(1)
+        name_m = re.search(r'ltx_personname[^>]*>(.*?)</span>', block, re.S)
+        name = re.sub(r'<[^>]+>', '', name_m.group(1)).strip() if name_m else ""
+        # Clean up LaTeX artifacts
+        name = re.sub(r'\\[a-z]+\b\s*', '', name).strip()
+
+        affs = []
+        for a in re.finditer(r'ltx_role_affiliation[^>]*>(.*?)</span>', block, re.S):
+            aff = re.sub(r'<[^>]+>', '', a.group(1)).strip()
+            aff = re.sub(r'^\[?\d*\]?\s*', '', aff).strip()  # remove leading [1] etc
+            if aff and len(aff) > 3:
+                affs.append(aff)
+                if aff not in all_affiliations:
+                    all_affiliations.append(aff)
+
+        if name:
+            authors.append({"name": name, "affiliations": affs})
+
+    return {"authors": authors, "affiliations": all_affiliations}
+
+
+def download_html(paper: Paper) -> tuple[str | None, dict]:
+    """Download arXiv HTML, extract metadata and text.
+
+    Returns (text_content, metadata_dict) where metadata_dict has
+    author/affiliation info parsed from HTML structure.
+    """
+    try:
+        raw_html = _request(paper.html_url, timeout=60).decode("utf-8", errors="replace")
+    except Exception:
+        return None, {}
+
+    metadata = extract_html_metadata(raw_html)
+
+    html = raw_html
     html = re.sub(r"<(script|style|nav|header|footer)[^>]*>.*?</\1>", "", html, flags=re.S | re.I)
     for tag, prefix in [("h1", "# "), ("h2", "## "), ("h3", "### "), ("h4", "#### ")]:
         html = re.sub(rf"<{tag}[^>]*>(.*?)</{tag}>", rf"\n{prefix}\1\n", html, flags=re.S | re.I)
@@ -195,7 +236,7 @@ def download_html(paper: Paper) -> str | None:
     text = re.sub(r"\n{3,}", "\n\n", text)
     text = re.sub(r"[ \t]+", " ", text)
     text = text.strip()
-    return text if len(text) > 500 else None
+    return (text, metadata) if len(text) > 500 else (None, metadata)
 
 
 def download_pdf_text(paper: Paper, save_path: str | None = None) -> str | None:
