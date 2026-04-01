@@ -1,4 +1,4 @@
-"""Full pipeline: pull → filter → download → summarize."""
+"""Entry point: arxiv-brew CLI with subcommands."""
 
 from __future__ import annotations
 
@@ -28,54 +28,15 @@ def _log(*args, **kwargs):
         print(*args, file=sys.stderr, **kwargs)
 
 
-def main(argv: list[str] | None = None) -> int:
+def _brew(args) -> int:
+    """Run the full pipeline: pull → filter → download → digest."""
     global _quiet
-    # Handle subcommands before argparse
-    args_list = argv if argv is not None else sys.argv[1:]
-    if args_list and args_list[0] == "init":
-        from .init import run_init
-        cfg = resolve_config_dir(None)
-        return run_init(str(cfg))
-    if args_list and args_list[0] == "refine":
-        from .refine import main as refine_main
-        return refine_main(args_list[1:])
-
-    parser = argparse.ArgumentParser(
-        prog="arxiv-brew",
-        description="Full arXiv digest pipeline.",
-    )
-    parser.add_argument("--version", action="version", version=f"arxiv-brew {__version__}")
-    parser.add_argument("--config-dir", metavar="DIR", default=None,
-                        help="Config directory (default: $ARXIV_BREW_CONFIG_DIR or ./config)")
-    parser.add_argument("--categories", nargs="+", default=None)
-    parser.add_argument("--keywords", metavar="FILE")
-    parser.add_argument("--research-profile", metavar="FILE",
-                        help="Research profile (default: <config-dir>/my_research.md)")
-    parser.add_argument("--keyword-db", default=None,
-                        help="Keyword database (default: <config-dir>/keywords.json)")
-    parser.add_argument("--update-keywords", action="store_true",
-                        help="Rebuild keyword DB from profile (rule-based, no LLM)")
-    parser.add_argument("--paper-dir", default="papers")
-    parser.add_argument("--digest-dir", default="digests")
-    parser.add_argument("--output", "-o", default=None,
-                        help="Write full JSON to file (composable with --digest-only)")
-    parser.add_argument("--digest-only", action="store_true",
-                        help="Print digest to stdout instead of JSON")
-    parser.add_argument("--no-dedup", "--force", action="store_true",
-                        help="Reprocess all papers, ignoring seen index")
-    parser.add_argument("--quiet", "-q", action="store_true",
-                        help="Suppress all stderr logging")
-    parser.add_argument("--refine-prompt", metavar="FILE",
-                        help="Write LLM refinement prompt for stage 2")
-    args = parser.parse_args(argv)
-
     _quiet = args.quiet
     date = datetime.now().strftime("%Y-%m-%d")
     cfg_dir = resolve_config_dir(args.config_dir)
-    if not args.keyword_db:
-        args.keyword_db = str(cfg_dir / "keywords.json")
+    keyword_db_path = args.keyword_db or str(cfg_dir / "keywords.json")
 
-    kw_db = KeywordDB(args.keyword_db)
+    kw_db = KeywordDB(keyword_db_path)
     if args.update_keywords or not kw_db.data.get("clusters"):
         if not args.research_profile:
             _log(f"{_P} No keyword database found.")
@@ -117,7 +78,7 @@ def main(argv: list[str] | None = None) -> int:
             _log(f"{_P} {skipped} already seen, {len(all_ids)} remaining")
 
     if not all_ids:
-        if args.digest_only:
+        if not args.json:
             print("No relevant papers today.")
         return EC.NO_MATCHES
 
@@ -131,7 +92,6 @@ def main(argv: list[str] | None = None) -> int:
     filtered = keyword_filter(papers, config, kw_db)
     kw_db.save()
 
-    # Mark all fetched IDs as seen (not just filtered) to avoid re-scanning
     seen.mark_seen([p.id for p in papers])
     seen.prune()
     seen.save()
@@ -146,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
         _log(f"{_P} Refinement prompt → {args.refine_prompt}")
 
     if not filtered:
-        if args.digest_only:
+        if not args.json:
             print("No relevant papers today.")
         return EC.NO_MATCHES
 
@@ -174,15 +134,76 @@ def main(argv: list[str] | None = None) -> int:
         "digest_text": digest_text,
     }
 
-    # --output always writes full JSON to file when specified
     if args.output:
         Path(args.output).write_text(json.dumps(result, ensure_ascii=False, indent=2))
 
-    # stdout: --digest-only prints digest text, otherwise prints full JSON
-    if args.digest_only:
-        print(digest_text)
-    elif not args.output:
+    if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        print(digest_text)
+
+    return EC.SUCCESS
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="arxiv-brew",
+        description="Keyword-based arXiv paper filtering and digest generation.",
+    )
+    parser.add_argument("--version", action="version", version=f"arxiv-brew {__version__}")
+    sub = parser.add_subparsers(dest="command")
+
+    # brew
+    p_brew = sub.add_parser("brew", help="Run the pipeline and print today's digest")
+    p_brew.add_argument("--config-dir", metavar="DIR", default=None)
+    p_brew.add_argument("--categories", nargs="+", default=None)
+    p_brew.add_argument("--keywords", metavar="FILE")
+    p_brew.add_argument("--research-profile", metavar="FILE")
+    p_brew.add_argument("--keyword-db", default=None)
+    p_brew.add_argument("--update-keywords", action="store_true",
+                        help="Sync keyword DB from research profile before running")
+    p_brew.add_argument("--paper-dir", default="papers")
+    p_brew.add_argument("--digest-dir", default="digests")
+    p_brew.add_argument("--output", "-o", default=None,
+                        help="Also write full JSON to file")
+    p_brew.add_argument("--json", action="store_true",
+                        help="Output JSON instead of readable digest")
+    p_brew.add_argument("--no-dedup", "--force", action="store_true",
+                        help="Reprocess all papers, ignoring seen index")
+    p_brew.add_argument("--quiet", "-q", action="store_true",
+                        help="Suppress stderr logging")
+    p_brew.add_argument("--refine-prompt", metavar="FILE",
+                        help="Write LLM refinement prompt for stage 2")
+
+    # init
+    sub.add_parser("init", help="Set up config/my_research.md and config/settings.json")
+
+    # refine
+    p_refine = sub.add_parser("refine", help="Apply LLM refinement to stage-1 candidates")
+    p_refine.add_argument("candidates", help="Stage-1 JSON output file")
+    p_refine.add_argument("llm_response", help="File containing raw LLM response text")
+    p_refine.add_argument("--keyword-db", default="config/keywords.json")
+    p_refine.add_argument("--output", "-o", default=None)
+
+    args = parser.parse_args(argv)
+
+    if not args.command:
+        parser.print_help()
+        return EC.SUCCESS
+
+    if args.command == "brew":
+        return _brew(args)
+
+    if args.command == "init":
+        from .init import run_init
+        cfg = resolve_config_dir(None)
+        return run_init(str(cfg))
+
+    if args.command == "refine":
+        from .refine import main as refine_main
+        return refine_main([args.candidates, args.llm_response,
+                           "--keyword-db", args.keyword_db]
+                          + (["--output", args.output] if args.output else []))
 
     return EC.SUCCESS
 

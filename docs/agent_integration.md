@@ -5,7 +5,7 @@ How to use arxiv-brew from LLM agents, cron jobs, and automation scripts.
 ## One-liner (cron / OpenClaw / CI)
 
 ```bash
-arxiv-brew --digest-only -q
+arxiv-brew brew -q
 ```
 
 Prints the digest to stdout, nothing to stderr. Exit code tells you what happened.
@@ -26,7 +26,7 @@ Prints the digest to stdout, nothing to stderr. Exit code tells you what happene
 pip install .
 arxiv-brew init
 # Edit config/my_research.md with your topics and keywords
-arxiv-brew --research-profile config/my_research.md --update-keywords --digest-only
+arxiv-brew brew --research-profile config/my_research.md --update-keywords
 ```
 
 `--update-keywords` is **rule-based** (no LLM). It parses your markdown profile into `config/keywords.json`. Re-run after editing your profile.
@@ -35,10 +35,10 @@ arxiv-brew --research-profile config/my_research.md --update-keywords --digest-o
 
 ```bash
 # Digest to stdout, JSON to file
-arxiv-brew --digest-only -q -o result.json
+arxiv-brew brew -q -o result.json
 
 # Just the digest
-arxiv-brew --digest-only -q
+arxiv-brew brew -q
 ```
 
 ### Flag interactions
@@ -46,9 +46,9 @@ arxiv-brew --digest-only -q
 | Flags | stdout | File |
 |-------|--------|------|
 | *(none)* | Full JSON | - |
-| `--digest-only` | Digest markdown | - |
+| *(default)* | Digest markdown | - |
 | `-o result.json` | *(nothing)* | Full JSON |
-| `--digest-only -o result.json` | Digest markdown | Full JSON |
+| `-o result.json` | Digest markdown | Full JSON |
 | `-q` | *(suppresses stderr only)* | - |
 
 ## Full pipeline with LLM refinement (stage 1 + 2)
@@ -88,11 +88,11 @@ All config files resolve from a config directory:
 
 ```bash
 # Use custom config location
-arxiv-brew --config-dir /etc/arxiv-brew --digest-only -q
+arxiv-brew --config-dir /etc/arxiv-brew brew -q
 
 # Or via env var
 export ARXIV_BREW_CONFIG_DIR=/etc/arxiv-brew
-arxiv-brew --digest-only -q
+arxiv-brew brew -q
 ```
 
 ## Idempotency
@@ -101,13 +101,13 @@ Running twice on the same day **skips already-processed papers** via `config/see
 
 ```bash
 # First run: scans and filters
-arxiv-brew --digest-only -q   # exit 0, prints digest
+arxiv-brew brew -q   # exit 0, prints digest
 
 # Second run: all papers already seen
-arxiv-brew --digest-only -q   # exit 1, prints "No relevant papers today."
+arxiv-brew brew -q   # exit 1, prints "No relevant papers today."
 
 # Force reprocess (debugging)
-arxiv-brew --digest-only -q --force
+arxiv-brew brew -q --force
 ```
 
 ## Research profile format
