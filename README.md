@@ -58,16 +58,18 @@ arxiv-brew --digest-only
 arxiv-brew --output result.json --paper-dir papers --digest-dir digests
 ```
 
-### Managing keywords
+### Managing keywords (optional)
+
+You can inspect and edit your keyword database at any time.
 
 ```bash
-# Show current keywords
+# Show current keywords grouped by cluster
 arxiv-keywords list
 
-# Add a keyword to a cluster
+# Add a keyword: arxiv-keywords add <cluster> <keyword>
 arxiv-keywords add "ML Potentials" "graph neural network"
 
-# Remove a keyword
+# Remove a keyword: arxiv-keywords remove <cluster> <keyword>
 arxiv-keywords remove "ML Potentials" "graph neural network"
 
 # After editing config/my_research.md, sync changes (preserves LLM-learned keywords)
@@ -77,7 +79,9 @@ arxiv-keywords update
 arxiv-keywords reset
 ```
 
-### Step-by-step pipeline
+### Step-by-step pipeline (optional)
+
+The commands below run individually what `arxiv-brew --digest-only` does in one step.
 
 ```bash
 arxiv-pull -o papers.json
@@ -90,6 +94,7 @@ arxiv-summarize downloaded.json --digest-dir digests/
 ```bash
 arxiv-db status
 arxiv-db cleanup --retention-days 14
+arxiv-db cleanup --force              # skip confirmation, useful in cron jobs
 ```
 
 ## Configuration

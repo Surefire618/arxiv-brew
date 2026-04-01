@@ -112,6 +112,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--paper-dir", default="papers")
     parser.add_argument("--retention-days", type=int, default=None,
                         help="Override retention days (default from config/settings.json)")
+    parser.add_argument("--force", action="store_true",
+                        help="Skip confirmation prompt (for cron jobs)")
     args = parser.parse_args(argv)
 
     db = PaperDB(paper_dir=args.paper_dir)
@@ -119,6 +121,19 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "status":
         print(json.dumps(db.status(), indent=2))
     elif args.command == "cleanup":
+        status = db.status()
+        days = args.retention_days or db.settings.paper_retention_days
+        if not args.force and status["paper_count"] > 0:
+            print(f"{_P} Will remove papers older than {days} days from {args.paper_dir}/", file=sys.stderr)
+            print(f"{_P} Current archive: {status['paper_count']} papers, {status['disk_mb']} MB", file=sys.stderr)
+            try:
+                answer = input("Continue? [y/N] ")
+                if answer.lower() not in ("y", "yes"):
+                    print(f"{_P} Cancelled.", file=sys.stderr)
+                    return 0
+            except (EOFError, KeyboardInterrupt):
+                print(f"\n{_P} Cancelled.", file=sys.stderr)
+                return 0
         result = db.cleanup(retention_days=args.retention_days)
         print(f"{_P} Removed {result['removed']} papers, kept {result['kept']}")
 
