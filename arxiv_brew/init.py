@@ -36,7 +36,8 @@ def run_init(config_dir: str = "config") -> int:
 
     print(f"\n{_P} Next steps:", file=sys.stderr)
     print(f"  1. Edit {profile}", file=sys.stderr)
-    print(f"  2. Run: arxiv-brew brew --research-profile {profile} --update-keywords", file=sys.stderr)
+    print(f"  2. Build keywords: arxiv-keywords update", file=sys.stderr)
+    print(f"  3. Run: arxiv-brew brew", file=sys.stderr)
 
     return 0
 
@@ -49,7 +50,8 @@ _DEFAULT_TEMPLATE = """\
 # config/keywords.json. Re-run with --update-keywords after editing.
 #
 # Usage:
-#   arxiv-brew brew --research-profile config/my_research.md --update-keywords
+#   arxiv-keywords update
+#   arxiv-brew brew
 #
 # ## File format
 #

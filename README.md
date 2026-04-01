@@ -45,7 +45,7 @@ arxiv-brew init
 # 2. Edit config/my_research.md with your arXiv categories and keywords
 
 # 3. Build the keyword database
-arxiv-brew brew --research-profile config/my_research.md --update-keywords
+arxiv-keywords update
 ```
 
 ## Usage
