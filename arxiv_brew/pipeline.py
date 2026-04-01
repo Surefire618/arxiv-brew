@@ -125,9 +125,16 @@ def _brew(args) -> int:
     summaries = []
     for paper in filtered:
         content = None
+        html_meta = None
         if paper.content_path and Path(paper.content_path).exists():
             content = Path(paper.content_path).read_text()
-        summaries.append(build_summary(paper, content))
+            meta_path = Path(paper.content_path).parent / "html_meta.json"
+            if meta_path.exists():
+                try:
+                    html_meta = json.loads(meta_path.read_text())
+                except json.JSONDecodeError:
+                    pass
+        summaries.append(build_summary(paper, content, html_meta))
 
     digest_text = format_digest(date, summaries)
     digest_dir = Path(args.digest_dir)
