@@ -14,8 +14,8 @@ Prints the digest to stdout, nothing to stderr. Exit code tells you what happene
 
 | Code | Meaning | Action |
 |------|---------|--------|
-| 0 | Success, results produced | Parse stdout |
-| 1 | No papers matched filters | Normal — no action needed |
+| 0 | Success, digest produced | Parse stdout |
+| 1 | No new papers (none matched, or all already downloaded) | Normal — no action needed |
 | 2 | Config error (missing profile, no keywords) | Fix config |
 | 3 | Network error (arxiv.org unreachable) | Retry later |
 | 4 | Parse error (bad JSON input) | Fix input file |
@@ -26,39 +26,44 @@ Prints the digest to stdout, nothing to stderr. Exit code tells you what happene
 pip install .
 arxiv-brew init
 # Edit config/my_research.md with your topics and keywords
-arxiv-brew brew --research-profile config/my_research.md --update-keywords
+arxiv-keywords update
 ```
 
-`--update-keywords` is **rule-based** (no LLM). It parses your markdown profile into `config/keywords.json`. Re-run after editing your profile.
+`arxiv-keywords update` is **rule-based** (no LLM). It parses your markdown profile into `config/keywords.json`. Re-run after editing your profile.
 
 ## Daily run (stage 1 only)
 
 ```bash
-# Digest to stdout, JSON to file
+# Readable digest to stdout
+arxiv-brew brew -q
+
+# Readable digest to stdout + JSON to file
 arxiv-brew brew -q -o result.json
 
-# Just the digest
-arxiv-brew brew -q
+# JSON to stdout (for programmatic parsing)
+arxiv-brew brew -q --json
 ```
 
-### Flag interactions
+### Output behavior
 
 | Flags | stdout | File |
 |-------|--------|------|
-| *(none)* | Full JSON | - |
-| *(default)* | Digest markdown | - |
-| `-o result.json` | *(nothing)* | Full JSON |
-| `-o result.json` | Digest markdown | Full JSON |
-| `-q` | *(suppresses stderr only)* | - |
+| *(default)* | Readable digest | - |
+| `--json` | Full JSON | - |
+| `-o result.json` | Readable digest | Full JSON |
+| `--json -o result.json` | Full JSON | Full JSON |
+
+`-q` suppresses stderr logging in all cases.
 
 ## Full pipeline with LLM refinement (stage 1 + 2)
 
 ```bash
 # Stage 1: keyword filter + generate refinement prompt
-arxiv-brew -o stage1.json --refine-prompt refine.txt -q
+arxiv-brew brew -o stage1.json --refine-prompt refine.txt -q
+
+# Agent reads refine.txt, sends to LLM, saves response to llm_response.txt
 
 # Stage 2: feed LLM response back
-# (agent sends refine.txt to LLM, saves response to llm_response.txt)
 arxiv-brew refine stage1.json llm_response.txt -o refined.json
 ```
 
@@ -67,7 +72,7 @@ arxiv-brew refine stage1.json llm_response.txt -o refined.json
 1. Reads stage-1 candidates from JSON
 2. Parses LLM response for keep/reject decisions and new keywords
 3. Filters papers, persists learned keywords to `config/keywords.json`
-4. Returns refined JSON
+4. Returns refined JSON with `kept_ids`, `removed_ids`, `keywords_learned`
 
 ### Python API (if you prefer)
 
@@ -75,7 +80,30 @@ arxiv-brew refine stage1.json llm_response.txt -o refined.json
 from arxiv_brew.refine import refine_papers
 
 result = refine_papers("stage1.json", llm_response_text)
-# result["papers"], result["kept_ids"], result["keywords_learned"]
+# result["kept_ids"]         — list of kept paper IDs
+# result["removed_ids"]      — list of removed paper IDs
+# result["keywords_learned"] — number of new keywords persisted
+# result["papers"]           — list of kept paper dicts
+```
+
+## Keyword management
+
+```bash
+# Show all keywords grouped by cluster
+arxiv-keywords list
+
+# Add/remove single keywords
+arxiv-keywords add "ML Potentials" "graph neural network"
+arxiv-keywords remove "ML Potentials" "graph neural network"
+
+# Sync from edited research profile (preserves LLM-learned keywords)
+arxiv-keywords update
+
+# Full reset (discards LLM-learned keywords)
+arxiv-keywords reset
+
+# Stats
+arxiv-keywords stats
 ```
 
 ## Config resolution
@@ -87,32 +115,32 @@ All config files resolve from a config directory:
 3. `./config` (default)
 
 ```bash
-# Use custom config location
-arxiv-brew --config-dir /etc/arxiv-brew brew -q
-
-# Or via env var
-export ARXIV_BREW_CONFIG_DIR=/etc/arxiv-brew
-arxiv-brew brew -q
+arxiv-brew brew --config-dir /etc/arxiv-brew -q
 ```
 
-## Idempotency
+## Idempotency and seen index
 
-Running twice on the same day **skips already-processed papers** via `config/seen.json`. The seen index auto-prunes entries older than 90 days.
+Keyword matching (pull + metadata + filter) **always runs** — it's cheap (<1s).
+
+The **download step** skips papers already in `config/seen.json`. This means:
+- Changing keywords and re-running `brew` immediately re-evaluates all today's papers
+- Only the download is skipped for already-processed papers
+- The seen index auto-prunes entries older than 90 days
 
 ```bash
-# First run: scans and filters
-arxiv-brew brew -q   # exit 0, prints digest
+# First run: full pipeline
+arxiv-brew brew -q           # exit 0, prints digest
 
-# Second run: all papers already seen
-arxiv-brew brew -q   # exit 1, prints "No relevant papers today."
+# Second run same day: matching runs again, but downloads are skipped
+arxiv-brew brew -q           # exit 1 if all matched papers already downloaded
 
-# Force reprocess (debugging)
+# Force re-download (debugging / keyword changes)
 arxiv-brew brew -q --force
 ```
 
 ## Research profile format
 
-`config/my_research.md` — see the template generated by `arxiv-brew init`:
+`config/my_research.md` — generated by `arxiv-brew init`:
 
 ```markdown
 ## Categories:
@@ -140,27 +168,40 @@ arxiv-brew brew -q --force
 
 | Command | Description |
 |---------|-------------|
-| `arxiv-brew` | Full pipeline (stage 1) |
-| `arxiv-brew init` | Generate config/my_research.md template |
+| `arxiv-brew brew` | Run pipeline, print digest |
+| `arxiv-brew brew --json` | Run pipeline, print JSON |
+| `arxiv-brew init` | Generate config/my_research.md |
 | `arxiv-brew refine` | Apply LLM refinement (stage 2) |
-| `arxiv-pull` | Pull + filter only (no download/digest) |
-| `arxiv-download` | Download full text for filtered papers |
-| `arxiv-summarize` | Generate digest from downloaded papers |
-| `arxiv-db status` | Show archive stats |
+| `arxiv-keywords list` | Show all keywords |
+| `arxiv-keywords add` | Add a keyword |
+| `arxiv-keywords remove` | Remove a keyword |
+| `arxiv-keywords update` | Sync keywords from profile |
+| `arxiv-keywords reset` | Rebuild keywords from profile |
+| `arxiv-pull` | Pull + filter only |
+| `arxiv-download` | Download full text |
+| `arxiv-summarize` | Generate digest |
+| `arxiv-db status` | Archive stats |
 | `arxiv-db cleanup` | Remove old papers |
 
-All commands support `--help`, `--quiet`, and `--config-dir`.
+All commands support `--help` and `-q` / `--quiet`.
 
 ## LLM response format (for stage 2)
 
 The LLM should respond with two JSON blocks:
 
+Decisions:
 ```json
-[{"index": 1, "keep": true, "reason": "relevant"}, ...]
+[
+  {"index": 1, "keep": true, "reason": "Directly relevant"},
+  {"index": 2, "keep": false, "reason": "Not atomistic"}
+]
 ```
 
+New keywords:
 ```json
-{"new_keywords": [{"keyword": "phonon polariton", "cluster": "Transport", "reason": "..."}]}
+{"new_keywords": [
+  {"keyword": "moment tensor potential", "cluster": "ML Potentials", "reason": "Specific MLIP architecture"}
+]}
 ```
 
-Learned keywords are persisted with `source: "llm"` and participate in future stage-1 filtering.
+Learned keywords are persisted with `source: "llm"` and participate in future stage-1 matching.
