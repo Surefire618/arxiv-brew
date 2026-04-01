@@ -45,17 +45,20 @@ arxiv-brew init
 # 2. Edit config/my_research.md with your arXiv categories and keywords
 
 # 3. Build the keyword database
-arxiv-brew --research-profile config/my_research.md --update-keywords
+arxiv-brew brew --research-profile config/my_research.md --update-keywords
 ```
 
 ## Usage
 
 ```bash
-# Daily digest
-arxiv-brew --digest-only
+# Daily digest (readable text)
+arxiv-brew brew
 
-# Full pipeline with file output
-arxiv-brew --output result.json --paper-dir papers --digest-dir digests
+# JSON output (for agents / scripts)
+arxiv-brew brew --json
+
+# Also save full JSON to file
+arxiv-brew brew --output result.json
 ```
 
 ### Managing keywords (optional)
@@ -81,7 +84,7 @@ arxiv-keywords reset
 
 ### Step-by-step pipeline (optional)
 
-The commands below run individually what `arxiv-brew --digest-only` does in one step.
+The commands below run individually what `arxiv-brew brew` does in one step.
 
 ```bash
 arxiv-pull -o papers.json
@@ -116,8 +119,10 @@ See [docs/agent_integration.md](docs/agent_integration.md) for how to use arxiv-
 
 | Command | Description |
 |---|---|
-| `arxiv-brew` | Full pipeline |
+| `arxiv-brew brew` | Run pipeline, print today's digest |
+| `arxiv-brew brew --json` | Same, but JSON output |
 | `arxiv-brew init` | Create research profile |
+| `arxiv-brew refine` | Apply LLM refinement to candidates |
 | `arxiv-keywords list` | Show all keywords |
 | `arxiv-keywords add CLUSTER KW` | Add a keyword |
 | `arxiv-keywords remove CLUSTER KW` | Remove a keyword |

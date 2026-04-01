@@ -5,7 +5,7 @@
 # config/keywords.json. Re-run with --update-keywords after editing.
 #
 # Usage:
-#   arxiv-brew --research-profile config/my_research.md --update-keywords --digest-only
+#   arxiv-brew brew --research-profile config/my_research.md --update-keywords --digest-only
 #
 # ## File format
 #
